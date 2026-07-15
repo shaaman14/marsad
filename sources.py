@@ -27,6 +27,54 @@ def domain(url):
     return host[4:] if host.startswith("www.") else host
 
 
+MARKET_TERMS = {
+    "market", "markets", "stocks", "equities", "shares", "bond", "bonds",
+    "yield", "yields", "treasury", "treasuries", "currency", "currencies",
+    "dollar", "euro", "yen", "yuan", "oil", "gold", "copper", "commodity",
+    "commodities", "inflation", "interest rate", "rates", "central bank",
+    "federal reserve", "fed", "ecb", "boj", "pbo", "gdp", "jobs",
+    "employment", "unemployment", "retail sales", "pmi"
+}
+
+BUSINESS_ONLY_TERMS = {
+    "movie", "film", "streaming", "social media curfew", "lawsuit",
+    "celebrity", "box office", "television", "entertainment"
+}
+
+
+def market_relevant(title, summary):
+    text = f"{title} {summary}".lower()
+    has_market_term = any(term in text for term in MARKET_TERMS)
+    business_only = any(term in text for term in BUSINESS_ONLY_TERMS)
+    return has_market_term and not business_only
+
+
+def story_key(title):
+    words = re.findall(r"[a-z0-9]+", title.lower())
+    stop = {
+        "the", "a", "an", "to", "of", "in", "on", "for", "and", "with",
+        "as", "at", "by", "from", "after", "says", "new"
+    }
+    core = sorted({word for word in words if word not in stop and len(word) > 2})
+    return "|".join(core[:10])
+
+
+def infer_topic(title, summary):
+    text = f"{title} {summary}".lower()
+    rules = [
+        ("Rates & Central Banks", ["fed", "federal reserve", "ecb", "rate cut", "rate hike", "interest rate"]),
+        ("FX", ["dollar", "yen", "yuan", "euro", "currency", "fx"]),
+        ("Commodities", ["oil", "gold", "copper", "uranium", "commodity"]),
+        ("Equities", ["stocks", "shares", "equities", "nasdaq", "s&p"]),
+        ("Economy", ["gdp", "inflation", "jobs", "employment", "pmi", "retail sales"]),
+        ("Geopolitics", ["war", "ceasefire", "sanction", "election", "missile", "strike"]),
+    ]
+    for label, terms in rules:
+        if any(term in text for term in terms):
+            return label
+    return "General"
+
+
 def allowed(url, section, config):
     host = domain(url)
     if any(host == d or host.endswith("." + d) for d in config.get("blocked_domains", [])):
@@ -98,14 +146,20 @@ async def fetch_direct_feed(section, spec, client):
         if not title or not url:
             continue
 
+        summary = clean(entry.get("summary") or entry.get("description"))
+        if section == "markets" and not market_relevant(title, summary):
+            continue
+
         output.append({
             "url": url,
             "title": title,
-            "summary": clean(entry.get("summary") or entry.get("description")),
+            "summary": summary,
             "source": spec["name"],
             "section": section,
             "published_at": parse_date(entry),
             "source_priority": int(spec.get("priority", 0)),
+            "topic": infer_topic(title, summary),
+            "story_key": story_key(title),
         })
     return output
 
@@ -141,14 +195,20 @@ async def fetch_gdelt(section, query, client, config):
             except Exception:
                 pass
 
+        summary = ""
+        if section == "markets" and not market_relevant(title, summary):
+            continue
+
         output.append({
             "url": url,
             "title": title,
-            "summary": "",
+            "summary": summary,
             "source": domain(url),
             "section": section,
             "published_at": published,
             "source_priority": 2,
+            "topic": infer_topic(title, summary),
+            "story_key": story_key(title),
         })
     return output
 

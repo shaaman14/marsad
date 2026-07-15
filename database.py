@@ -48,7 +48,9 @@ def initialise():
             section TEXT NOT NULL,
             published_at TEXT,
             fetched_at TEXT NOT NULL,
-            importance INTEGER DEFAULT 0
+            importance INTEGER DEFAULT 0,
+            topic TEXT,
+            story_key TEXT
         );
         """)
 
@@ -97,10 +99,20 @@ def watchlist(kind):
 
 def save_article(article):
     with connect() as conn:
+        # Existing Railway databases may predate topic/story_key.
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(articles)")
+        }
+        if "topic" not in columns:
+            conn.execute("ALTER TABLE articles ADD COLUMN topic TEXT")
+        if "story_key" not in columns:
+            conn.execute("ALTER TABLE articles ADD COLUMN story_key TEXT")
+
         cur = conn.execute("""
         INSERT OR IGNORE INTO articles
-        (url, title, summary, source, section, published_at, fetched_at, importance)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (url, title, summary, source, section, published_at, fetched_at,
+         importance, topic, story_key)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             article["url"],
             article["title"],
@@ -110,6 +122,8 @@ def save_article(article):
             article.get("published_at"),
             article["fetched_at"],
             article.get("importance", 0),
+            article.get("topic"),
+            article.get("story_key"),
         ))
         return cur.rowcount > 0
 

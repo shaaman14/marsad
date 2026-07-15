@@ -1,17 +1,17 @@
 # Changelog
 
-## v0.3 — Quality-first source engine
+## v0.4 — Execution fix
 
-- Trusted direct feeds now run before any discovery search.
-- World sources: AP, BBC World, Al Jazeera, CNA World, CNA Asia, DW, France 24.
-- Markets sources: Federal Reserve, ECB, IMF, BBC Business, CNA Business.
-- GDELT is only used as a fallback when direct sources provide too few fresh stories.
-- Mint, MSN, and NewsBreak remain blocked.
-- Refresh reports how many direct sources were healthy.
-- Company news still uses a tightly filtered discovery layer pending company-specific IR feeds.
-- Corrected Coffee Break wording about Amsterdam and earlier exchanges.
+- Brew now uses publisher summaries to produce short narrative paragraphs.
+- Markets filters out entertainment, legal, and generic business stories.
+- Markets stories are grouped into Rates, FX, Commodities, Equities, Economy, or Geopolitics.
+- Every tracked company appears, including an explicit “No material fresh developments” status.
+- Every tracked theme appears with the same explicit status.
+- Coffee Break now rotates through curated trivia and financial-history items.
+- Removed the Amsterdam placeholder.
+- Duplicate stories are suppressed using a normalised story key.
+- Source links and publication ages remain visible.
 
-## v0.2
+## v0.3
 
-- Added strict freshness windows and publication labels.
-- Brew reads cached data for faster display.
+- Direct trusted feeds first; GDELT fallback only.
