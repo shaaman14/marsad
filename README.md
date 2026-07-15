@@ -43,3 +43,18 @@ Then:
 ```text
 /brew
 ```
+
+
+## v0.2 test
+
+After Railway deploys:
+
+1. Press **Refresh** once and wait for completion.
+2. Send `/brew`.
+3. Subsequent Brew requests should be fast.
+
+Freshness:
+- World and Markets: 36 hours
+- Companies and Themes: 72 hours
+- Undated core-news stories: excluded
+- Coffee Break: up to 30 days

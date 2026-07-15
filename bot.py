@@ -67,7 +67,6 @@ async def send(message, text, markup=None):
 
 
 async def send_brew(message):
-    await refresh(USER_AGENT)
     chunks = build(TIMEZONE)
     for index, chunk in enumerate(chunks):
         await send(message, chunk, menu() if index == len(chunks) - 1 else None)
@@ -119,12 +118,12 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "brew":
         await send_brew(query.message)
     elif query.data == "refresh":
+        await send(query.message, "Refreshing sources…")
         result = await refresh(USER_AGENT)
-        await send(
-            query.message,
-            f'Refresh complete: <b>{result["added"]}</b> new stories.',
-            menu(),
-        )
+        text = f'Refresh complete: <b>{result["added"]}</b> new stories.'
+        if result["errors"]:
+            text += f'\n{len(result["errors"])} source searches were unavailable.'
+        await send(query.message, text, menu())
     elif query.data == "watchlists":
         companies = ", ".join(watchlist("company")) or "None"
         themes = ", ".join(watchlist("theme")) or "None"
@@ -147,7 +146,6 @@ async def scheduled_refresh(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def scheduled_brew(context: ContextTypes.DEFAULT_TYPE):
-    await refresh(USER_AGENT)
     chunks = build(TIMEZONE)
     for chat_id in subscribers():
         try:
@@ -186,7 +184,7 @@ def main():
     app.add_handler(CommandHandler("remove", remove))
     app.add_handler(CallbackQueryHandler(callback))
 
-    app.job_queue.run_repeating(scheduled_refresh, interval=3600, first=15)
+    app.job_queue.run_repeating(scheduled_refresh, interval=1800, first=5)
 
     timezone = ZoneInfo(TIMEZONE)
     send_time = datetime.now(timezone).replace(

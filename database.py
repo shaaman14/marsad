@@ -114,16 +114,18 @@ def save_article(article):
         return cur.rowcount > 0
 
 
-def recent_articles(section, limit=20, hours=72):
+def recent_articles(section, limit=20, hours=72, require_published=True):
+    published_clause = "AND published_at IS NOT NULL" if require_published else ""
     with connect() as conn:
         return [
             dict(row)
-            for row in conn.execute("""
+            for row in conn.execute(f"""
             SELECT * FROM articles
             WHERE section = ?
-              AND datetime(fetched_at) >= datetime('now', ?)
+              {published_clause}
+              AND datetime(COALESCE(published_at, fetched_at)) >= datetime('now', ?)
             ORDER BY importance DESC,
-                     datetime(published_at) DESC,
+                     datetime(COALESCE(published_at, fetched_at)) DESC,
                      id DESC
             LIMIT ?
             """, (section, f"-{hours} hours", limit))
