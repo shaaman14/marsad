@@ -58,3 +58,16 @@ Freshness:
 - Companies and Themes: 72 hours
 - Undated core-news stories: excluded
 - Coffee Break: up to 30 days
+
+
+## v0.3 test sequence
+
+After deployment:
+
+1. Press **Refresh** once.
+2. Wait for the result showing `Direct sources healthy: X/Y`.
+3. Send `/brew`.
+4. Check that World and Markets contain current stories with publisher and age.
+
+GDELT is now fallback-only. It is still used for company discovery until company-specific
+IR and regulatory feeds are added.

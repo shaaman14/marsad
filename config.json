@@ -16,41 +16,101 @@
     "China technology",
     "Private markets"
   ],
-  "rss_feeds": {
+  "direct_feeds": {
+    "world": [
+      {
+        "name": "Associated Press",
+        "url": "https://apnews.com/index.rss",
+        "priority": 10
+      },
+      {
+        "name": "BBC World",
+        "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+        "priority": 9
+      },
+      {
+        "name": "Al Jazeera",
+        "url": "https://www.aljazeera.com/xml/rss/all.xml",
+        "priority": 9
+      },
+      {
+        "name": "CNA World",
+        "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6311",
+        "priority": 9
+      },
+      {
+        "name": "CNA Asia",
+        "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511",
+        "priority": 9
+      },
+      {
+        "name": "Deutsche Welle",
+        "url": "https://rss.dw.com/rdf/rss-en-all",
+        "priority": 8
+      },
+      {
+        "name": "France 24",
+        "url": "https://www.france24.com/en/rss",
+        "priority": 8
+      }
+    ],
     "markets": [
       {
         "name": "Federal Reserve",
-        "url": "https://www.federalreserve.gov/feeds/press_all.xml"
+        "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+        "priority": 10
       },
       {
-        "name": "ECB",
-        "url": "https://www.ecb.europa.eu/rss/press.html"
+        "name": "European Central Bank",
+        "url": "https://www.ecb.europa.eu/rss/press.html",
+        "priority": 10
       },
       {
         "name": "IMF",
-        "url": "https://www.imf.org/en/News/RSS"
+        "url": "https://www.imf.org/en/News/RSS",
+        "priority": 9
+      },
+      {
+        "name": "BBC Business",
+        "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
+        "priority": 8
+      },
+      {
+        "name": "CNA Business",
+        "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6936",
+        "priority": 9
       }
     ]
   },
-  "gdelt_queries": {
-    "world": [
-      "global geopolitics economy",
-      "Middle East Africa Asia world news"
-    ],
-    "markets": [
-      "global markets bonds currencies commodities",
-      "Asia markets central banks rates"
-    ],
-    "themes": [
-      "AI capex",
-      "uranium nuclear energy",
-      "China technology",
-      "private markets"
-    ],
-    "coffee": [
-      "science history nature discovery",
-      "financial history anniversary"
-    ]
+  "fallback": {
+    "enabled": true,
+    "minimum_fresh_stories": {
+      "world": 5,
+      "markets": 5,
+      "companies": 1,
+      "themes": 2,
+      "coffee": 1
+    },
+    "queries": {
+      "world": [
+        "global geopolitics economy",
+        "Middle East Africa Asia world news"
+      ],
+      "markets": [
+        "global markets bonds currencies commodities",
+        "Asia markets central banks rates"
+      ],
+      "themes": [
+        "AI capex",
+        "uranium nuclear energy",
+        "China technology",
+        "private markets"
+      ],
+      "coffee": [
+        "science history nature discovery",
+        "financial history anniversary"
+      ]
+    }
   },
   "allowed_domains": {
     "world": [
@@ -72,7 +132,10 @@
       "marketwatch.com",
       "reuters.com",
       "ft.com",
-      "wsj.com"
+      "wsj.com",
+      "channelnewsasia.com",
+      "bbc.com",
+      "bbc.co.uk"
     ],
     "themes": [
       "semianalysis.com",

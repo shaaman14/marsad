@@ -120,9 +120,17 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "refresh":
         await send(query.message, "Refreshing sources…")
         result = await refresh(USER_AGENT)
-        text = f'Refresh complete: <b>{result["added"]}</b> new stories.'
+        healthy = sum(
+            1 for item in result.get("source_health", [])
+            if item.get("status") == "ok"
+        )
+        total = len(result.get("source_health", []))
+        text = (
+            f'Refresh complete: <b>{result["added"]}</b> new stories.\n'
+            f'Direct sources healthy: <b>{healthy}/{total}</b>.'
+        )
         if result["errors"]:
-            text += f'\n{len(result["errors"])} source searches were unavailable.'
+            text += f'\n{len(result["errors"])} source checks were unavailable.'
         await send(query.message, text, menu())
     elif query.data == "watchlists":
         companies = ", ".join(watchlist("company")) or "None"

@@ -1,12 +1,17 @@
 # Changelog
 
+## v0.3 — Quality-first source engine
+
+- Trusted direct feeds now run before any discovery search.
+- World sources: AP, BBC World, Al Jazeera, CNA World, CNA Asia, DW, France 24.
+- Markets sources: Federal Reserve, ECB, IMF, BBC Business, CNA Business.
+- GDELT is only used as a fallback when direct sources provide too few fresh stories.
+- Mint, MSN, and NewsBreak remain blocked.
+- Refresh reports how many direct sources were healthy.
+- Company news still uses a tightly filtered discovery layer pending company-specific IR feeds.
+- Corrected Coffee Break wording about Amsterdam and earlier exchanges.
+
 ## v0.2
 
-- Brew now reads cached database data and should open quickly.
-- Sources refresh every 30 minutes in the background.
-- World and Markets stories must be published within 36 hours.
-- Company and Theme stories must be published within 72 hours.
-- Undated stories are excluded from core Brew sections.
-- Every story displays its publication age or date.
-- Coffee Break may include older, timeless material.
-- Refresh acknowledges immediately before fetching.
+- Added strict freshness windows and publication labels.
+- Brew reads cached data for faster display.
