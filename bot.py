@@ -19,6 +19,7 @@ from brew import build
 from database import (
     add_subscriber,
     add_watch,
+    get_source_health,
     initialise,
     remove_watch,
     subscribers,
@@ -53,6 +54,7 @@ def menu():
             InlineKeyboardButton("🧠 Themes", callback_data="themes"),
             InlineKeyboardButton("⚙️ Watchlists", callback_data="watchlists"),
         ],
+        [InlineKeyboardButton("🩺 Sources", callback_data="sources")],
         [InlineKeyboardButton("🔄 Refresh", callback_data="refresh")],
     ])
 
@@ -140,6 +142,19 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Companies</b>\n{companies}\n\n<b>Themes</b>\n{themes}",
             menu(),
         )
+    elif query.data == "sources":
+        rows = get_source_health()
+        if not rows:
+            await send(query.message, "No source-health data yet. Press Refresh first.", menu())
+        else:
+            lines = ["<b>🩺 Source Health</b>"]
+            for row in rows:
+                icon = "✅" if row["status"] == "ok" else "❌"
+                lines.append(
+                    f'{icon} <b>{row["source"]}</b> · {row["section"]} · '
+                    f'{row["item_count"]} items'
+                )
+            await send(query.message, "\n".join(lines)[:3900], menu())
     else:
         await send(
             query.message,
