@@ -1,0 +1,109 @@
+{
+  "brand": "Marsad",
+  "default_companies": [
+    "NVIDIA",
+    "Reddit",
+    "Alibaba",
+    "Cameco",
+    "KKR",
+    "Brookfield Asset Management",
+    "Visa",
+    "Mastercard"
+  ],
+  "default_themes": [
+    "AI capex",
+    "Uranium",
+    "China technology",
+    "Private markets"
+  ],
+  "rss_feeds": {
+    "markets": [
+      {
+        "name": "Federal Reserve",
+        "url": "https://www.federalreserve.gov/feeds/press_all.xml"
+      },
+      {
+        "name": "ECB",
+        "url": "https://www.ecb.europa.eu/rss/press.html"
+      },
+      {
+        "name": "IMF",
+        "url": "https://www.imf.org/en/News/RSS"
+      }
+    ]
+  },
+  "gdelt_queries": {
+    "world": [
+      "global geopolitics economy",
+      "Middle East Africa Asia world news"
+    ],
+    "markets": [
+      "global markets bonds currencies commodities",
+      "Asia markets central banks rates"
+    ],
+    "themes": [
+      "AI capex",
+      "uranium nuclear energy",
+      "China technology",
+      "private markets"
+    ],
+    "coffee": [
+      "science history nature discovery",
+      "financial history anniversary"
+    ]
+  },
+  "allowed_domains": {
+    "world": [
+      "apnews.com",
+      "bbc.com",
+      "bbc.co.uk",
+      "aljazeera.com",
+      "semafor.com",
+      "channelnewsasia.com",
+      "africanews.com",
+      "thenationalnews.com",
+      "arabnews.com",
+      "dw.com",
+      "france24.com"
+    ],
+    "markets": [
+      "cnbc.com",
+      "finance.yahoo.com",
+      "marketwatch.com",
+      "reuters.com",
+      "ft.com",
+      "wsj.com"
+    ],
+    "themes": [
+      "semianalysis.com",
+      "world-nuclear-news.org",
+      "iaea.org",
+      "technologyreview.com",
+      "arstechnica.com",
+      "theverge.com",
+      "reuters.com",
+      "cnbc.com"
+    ],
+    "coffee": [
+      "nationalgeographic.com",
+      "smithsonianmag.com",
+      "quantamagazine.org",
+      "atlasobscura.com",
+      "ourworldindata.org",
+      "nasa.gov",
+      "britannica.com"
+    ],
+    "companies": [
+      "reuters.com",
+      "cnbc.com",
+      "finance.yahoo.com",
+      "marketwatch.com",
+      "sec.gov"
+    ]
+  },
+  "blocked_domains": [
+    "livemint.com",
+    "msn.com",
+    "newsbreak.com"
+  ]
+}
