@@ -192,7 +192,7 @@ def main():
     app.add_handler(CommandHandler("remove", remove))
     app.add_handler(CallbackQueryHandler(callback))
 
-    app.job_queue.run_repeating(scheduled_refresh, interval=1800, first=5)
+    app.job_queue.run_repeating(scheduled_refresh, interval=3600, first=5)
 
     timezone = ZoneInfo(TIMEZONE)
     send_time = datetime.now(timezone).replace(

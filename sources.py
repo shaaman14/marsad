@@ -1,3 +1,4 @@
+import asyncio
 import html
 import json
 import re
@@ -233,37 +234,71 @@ async def refresh(user_agent):
     errors = []
     source_health = []
 
+    timeout = httpx.Timeout(
+        connect=6.0,
+        read=10.0,
+        write=10.0,
+        pool=6.0,
+    )
+
     async with httpx.AsyncClient(
-        timeout=httpx.Timeout(20.0, connect=10.0),
+        timeout=timeout,
         headers={"User-Agent": user_agent},
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
     ) as client:
-        # Trusted direct feeds are always fetched first.
-        for section, specs in config.get("direct_feeds", {}).items():
-            for spec in specs:
-                try:
-                    items = await fetch_direct_feed(section, spec, client)
-                    added += store(items)
-                    source_health.append({
-                        "source": spec["name"],
-                        "section": section,
-                        "status": "ok",
-                        "items": len(items),
-                    })
-                except Exception as exc:
-                    errors.append(f'{spec["name"]}: {exc}')
-                    source_health.append({
-                        "source": spec["name"],
-                        "section": section,
-                        "status": "error",
-                        "items": 0,
-                    })
+
+        async def run_direct(section, spec):
+            try:
+                items = await asyncio.wait_for(
+                    fetch_direct_feed(section, spec, client),
+                    timeout=12,
+                )
+                count = store(items)
+                return count, {
+                    "source": spec["name"],
+                    "section": section,
+                    "status": "ok",
+                    "items": len(items),
+                }, None
+            except Exception as exc:
+                return 0, {
+                    "source": spec["name"],
+                    "section": section,
+                    "status": "error",
+                    "items": 0,
+                }, f'{spec["name"]}: {exc}'
+
+        # Fetch all trusted feeds in parallel.
+        direct_tasks = [
+            run_direct(section, spec)
+            for section, specs in config.get("direct_feeds", {}).items()
+            for spec in specs
+        ]
+        if direct_tasks:
+            direct_results = await asyncio.gather(*direct_tasks)
+            for count, health, error in direct_results:
+                added += count
+                source_health.append(health)
+                if error:
+                    errors.append(error)
 
         fallback = config.get("fallback", {})
         if fallback.get("enabled", True):
             minimums = fallback.get("minimum_fresh_stories", {})
             queries = fallback.get("queries", {})
 
-            # Only use GDELT when direct feeds did not leave enough fresh material.
+            async def run_fallback(section, query):
+                try:
+                    items = await asyncio.wait_for(
+                        fetch_gdelt(section, query, client, config),
+                        timeout=10,
+                    )
+                    return store(items), None
+                except Exception as exc:
+                    return 0, f"GDELT fallback {section}: {exc}"
+
+            # At most one fallback query per section, and only where needed.
+            fallback_tasks = []
             for section, section_queries in queries.items():
                 current_count = len(
                     recent_articles(
@@ -274,34 +309,39 @@ async def refresh(user_agent):
                     )
                 )
                 required = int(minimums.get(section, 0))
-                if current_count >= required:
-                    continue
-
-                for query in section_queries:
-                    try:
-                        items = await fetch_gdelt(section, query, client, config)
-                        added += store(items)
-                    except Exception as exc:
-                        errors.append(f"GDELT fallback {section}: {exc}")
-
-                    current_count = len(
-                        recent_articles(
-                            section,
-                            limit=100,
-                            hours=48 if section in {"world", "markets"} else 72,
-                            require_published=True,
-                        )
+                if current_count < required and section_queries:
+                    fallback_tasks.append(
+                        run_fallback(section, section_queries[0])
                     )
-                    if current_count >= required:
-                        break
 
-        # Company discovery remains query-based until direct IR/entity feeds are added.
-        for company in watchlist("company")[:20]:
+            if fallback_tasks:
+                fallback_results = await asyncio.gather(*fallback_tasks)
+                for count, error in fallback_results:
+                    added += count
+                    if error:
+                        errors.append(error)
+
+        # Company discovery is the slowest layer.
+        # Limit to five companies per refresh and run them in parallel.
+        async def run_company(company):
             try:
-                items = await fetch_gdelt("companies", company, client, config)
-                added += store(items)
+                items = await asyncio.wait_for(
+                    fetch_gdelt("companies", company, client, config),
+                    timeout=8,
+                )
+                return store(items), None
             except Exception as exc:
-                errors.append(f"Company discovery {company}: {exc}")
+                return 0, f"Company discovery {company}: {exc}"
+
+        companies = watchlist("company")[:5]
+        if companies:
+            company_results = await asyncio.gather(
+                *(run_company(company) for company in companies)
+            )
+            for count, error in company_results:
+                added += count
+                if error:
+                    errors.append(error)
 
     return {
         "added": added,
