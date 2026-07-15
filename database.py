@@ -50,7 +50,17 @@ def initialise():
             fetched_at TEXT NOT NULL,
             importance INTEGER DEFAULT 0,
             topic TEXT,
-            story_key TEXT
+            story_key TEXT,
+            region TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS source_health (
+            source TEXT PRIMARY KEY,
+            section TEXT NOT NULL,
+            status TEXT NOT NULL,
+            item_count INTEGER NOT NULL DEFAULT 0,
+            error_text TEXT,
+            checked_at TEXT NOT NULL
         );
         """)
 
@@ -99,20 +109,22 @@ def watchlist(kind):
 
 def save_article(article):
     with connect() as conn:
-        # Existing Railway databases may predate topic/story_key.
         columns = {
             row["name"] for row in conn.execute("PRAGMA table_info(articles)")
         }
-        if "topic" not in columns:
-            conn.execute("ALTER TABLE articles ADD COLUMN topic TEXT")
-        if "story_key" not in columns:
-            conn.execute("ALTER TABLE articles ADD COLUMN story_key TEXT")
+        for column, sql_type in {
+            "topic": "TEXT",
+            "story_key": "TEXT",
+            "region": "TEXT",
+        }.items():
+            if column not in columns:
+                conn.execute(f"ALTER TABLE articles ADD COLUMN {column} {sql_type}")
 
         cur = conn.execute("""
         INSERT OR IGNORE INTO articles
         (url, title, summary, source, section, published_at, fetched_at,
-         importance, topic, story_key)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         importance, topic, story_key, region)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             article["url"],
             article["title"],
@@ -124,8 +136,63 @@ def save_article(article):
             article.get("importance", 0),
             article.get("topic"),
             article.get("story_key"),
+            article.get("region"),
         ))
         return cur.rowcount > 0
+
+
+def save_source_health(items):
+    with connect() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS source_health (
+            source TEXT PRIMARY KEY,
+            section TEXT NOT NULL,
+            status TEXT NOT NULL,
+            item_count INTEGER NOT NULL DEFAULT 0,
+            error_text TEXT,
+            checked_at TEXT NOT NULL
+        )
+        """)
+        for item in items:
+            conn.execute("""
+            INSERT INTO source_health
+            (source, section, status, item_count, error_text, checked_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source) DO UPDATE SET
+                section=excluded.section,
+                status=excluded.status,
+                item_count=excluded.item_count,
+                error_text=excluded.error_text,
+                checked_at=excluded.checked_at
+            """, (
+                item["source"],
+                item["section"],
+                item["status"],
+                item.get("items", 0),
+                item.get("error"),
+                now_iso(),
+            ))
+
+
+def get_source_health():
+    with connect() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS source_health (
+            source TEXT PRIMARY KEY,
+            section TEXT NOT NULL,
+            status TEXT NOT NULL,
+            item_count INTEGER NOT NULL DEFAULT 0,
+            error_text TEXT,
+            checked_at TEXT NOT NULL
+        )
+        """)
+        return [
+            dict(row)
+            for row in conn.execute("""
+            SELECT * FROM source_health
+            ORDER BY section, status DESC, source
+            """)
+        ]
 
 
 def recent_articles(section, limit=20, hours=72, require_published=True):
