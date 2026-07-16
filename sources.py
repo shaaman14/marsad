@@ -11,7 +11,7 @@ import feedparser
 import httpx
 from bs4 import BeautifulSoup
 
-from database import now_iso, recent_articles, save_article, save_source_health, watchlist
+from database import now_iso, recent_articles, save_article, save_market_snapshot, save_source_health, watchlist
 
 BASE = Path(__file__).parent
 
@@ -118,9 +118,11 @@ def parse_date(entry):
     return None
 
 
-def importance(title, summary, section, source_priority=0):
+def importance(title, summary, section, source_priority=0, source_name=""):
     text = f"{title} {summary}".lower()
     score = source_priority
+    config = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
+    score += int(config.get("source_quality", {}).get(source_name, 0))
 
     strong = [
         "default", "downgrade", "upgrade", "merger", "acquisition",
@@ -284,9 +286,26 @@ def store(items):
             item.get("summary", ""),
             item["section"],
             item.pop("source_priority", 0),
+            item.get("source", ""),
         )
         added += int(save_article(item))
     return added
+
+
+async def fetch_market_snapshot(config, client):
+    rows=[]
+    for name,symbol in config.get("market_snapshot",{}).items():
+        try:
+            url="https://query1.finance.yahoo.com/v7/finance/quote?"+urlencode({"symbols":symbol})
+            r=await client.get(url,follow_redirects=True); r.raise_for_status()
+            result=r.json().get("quoteResponse",{}).get("result",[])
+            if not result: continue
+            q=result[0]
+            rows.append({"name":name,"symbol":symbol,"value":q.get("regularMarketPrice"),"change_pct":q.get("regularMarketChangePercent"),"as_of":datetime.fromtimestamp(q.get("regularMarketTime",0),tz=timezone.utc).isoformat() if q.get("regularMarketTime") else None})
+        except Exception:
+            continue
+    if rows: save_market_snapshot(rows)
+    return rows
 
 
 async def refresh(user_agent):
@@ -307,6 +326,8 @@ async def refresh(user_agent):
         headers={"User-Agent": user_agent},
         limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
     ) as client:
+
+        snapshot_task = asyncio.create_task(fetch_market_snapshot(config, client))
 
         async def run_direct(section, spec):
             try:
@@ -436,6 +457,7 @@ async def refresh(user_agent):
                 errors.append(f'{health["source"]}: {health["error"]}')
 
         save_source_health(source_health)
+        await snapshot_task
 
     return {
         "added": added,

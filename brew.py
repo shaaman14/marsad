@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from database import recent_articles, watchlist
+from database import get_market_snapshot, recent_articles, watchlist
 
 DIVIDER = "━━━━━━━━━━━━━━━━━━"
 
@@ -156,6 +156,25 @@ def why_it_matters(item):
     return mapping.get(topic, "")
 
 
+
+def market_snapshot_section():
+    rows=get_market_snapshot()
+    if not rows: return "<b>📊 Market Snapshot</b>\n\nMarket data unavailable."
+    lines=["<b>📊 Market Snapshot</b>"]
+    for row in rows:
+        value=row.get("value"); change=row.get("change_pct")
+        if value is None: continue
+        if row["name"]=="UST 10Y": value_text=f"{value:.2f}%"
+        elif row["name"] in {"USD/JPY","USD/CNH"}: value_text=f"{value:.3f}"
+        elif value>=1000: value_text=f"{value:,.0f}"
+        else: value_text=f"{value:,.2f}"
+        change_text=""
+        if change is not None:
+            arrow="▲" if change>=0 else "▼"
+            change_text=f" {arrow} {abs(change):.2f}%"
+        lines.append(f"<b>{escape(row['name'])}</b>  {value_text}{change_text}")
+    return "\n".join(lines)
+
 def world_section(items):
     clusters = cluster_events(items, 15)
     selected = []
@@ -226,10 +245,14 @@ def company_section():
 
     for company in watchlist("company")[:12]:
         names = aliases.get(company, [company])
-        matched = [
-            item for item in items
-            if any(name.lower() in (item["title"] + " " + (item.get("summary") or "")).lower() for name in names)
-        ]
+        junk_terms = cfg.get("company_junk_terms", [])
+        matched=[]
+        for item in items:
+            text=(item["title"]+" "+(item.get("summary") or "")).lower()
+            if not any(name.lower() in text for name in names): continue
+            if any(term in text for term in junk_terms): continue
+            if item.get("importance",0)<5: continue
+            matched.append(item)
         clusters = cluster_events(matched, 3)
         if not clusters:
             blocks.append(f"<b>{escape(company)}</b>\nNo material fresh developments.")
@@ -245,27 +268,28 @@ def company_section():
 
 
 def theme_section():
-    items = recent_articles("themes", 300, 72, True)
-    blocks = ["<b>🧠 Themes</b>"]
+    items=recent_articles("themes",400,72,True)+recent_articles("companies",400,72,True)
+    blocks=["<b>🧠 Themes</b>"]
+    rules={
+      "AI capex":["nvidia","nvda","microsoft","meta","alphabet","google","amazon","oracle","broadcom","amd","tsmc","data center","data centre","ai infrastructure","artificial intelligence"],
+      "China technology":["alibaba","tencent","baidu","meituan","jd.com","china tech","chinese technology","cloud","semiconductor"],
+      "Private markets":["kkr","blackstone","apollo","brookfield","private equity","private credit","private markets","fundraising","buyout"],
+      "Uranium":["uranium","cameco","kazatomprom","nexgen","yellowcake","nuclear fuel","uranium mine","uranium production"]}
+    exclusions={"China technology":["reactor","nuclear power plant","uranium","pressure vessel"],"AI capex":["reddit ama","ai-generated image"]}
     for theme in watchlist("theme")[:10]:
-        words = token_set(theme)
-        matched = [
-            item for item in items
-            if words & token_set(item["title"] + " " + (item.get("summary") or "") + " " + (item.get("topic") or ""))
-        ]
-        clusters = cluster_events(matched, 3)
+        matched=[]
+        for item in items:
+            text=(item["title"]+" "+(item.get("summary") or "")+" "+(item.get("topic") or "")).lower()
+            if not any(term in text for term in rules.get(theme,[theme.lower()])): continue
+            if any(term in text for term in exclusions.get(theme,[])): continue
+            if item.get("importance",0)<5: continue
+            matched.append(item)
+        clusters=cluster_events(matched,3)
         if not clusters:
-            blocks.append(f"<b>{escape(theme)}</b>\nNo material fresh developments.")
-            continue
-        c = clusters[0]
-        lead = c["lead"]
-        blocks.append(
-            f'<b>{escape(theme)}</b>\n'
-            f'{escape(clean_summary(lead))}\n'
-            f'<i>{source_line(c)}</i>'
-        )
+            blocks.append(f"<b>{escape(theme)}</b>\nNo material fresh developments."); continue
+        c=clusters[0]; lead=c["lead"]
+        blocks.append(f'<b>{escape(theme)}</b>\n{escape(clean_summary(lead))}\n<i>{source_line(c)}</i>')
     return "\n\n".join(blocks)
-
 
 def coffee_break(now):
     fresh = recent_articles("coffee", 8, 24 * 7, True)
@@ -303,6 +327,7 @@ def build(timezone_name):
 
     parts = [
         f"<b>☕ MARSAD BREW</b>\n<i>{now.strftime('%A, %d %B %Y')}</i>\n\n{escape(opening(world_items, market_items))}",
+        market_snapshot_section(),
         world_section(world_items),
         markets_section(market_items),
         company_section(),

@@ -54,6 +54,15 @@ def initialise():
             region TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS market_snapshot (
+            name TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            value REAL,
+            change_pct REAL,
+            as_of TEXT,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS source_health (
             source TEXT PRIMARY KEY,
             section TEXT NOT NULL,
@@ -211,3 +220,25 @@ def recent_articles(section, limit=20, hours=72, require_published=True):
             LIMIT ?
             """, (section, f"-{hours} hours", limit))
         ]
+
+
+def save_market_snapshot(rows):
+    with connect() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS market_snapshot (
+            name TEXT PRIMARY KEY, symbol TEXT NOT NULL, value REAL,
+            change_pct REAL, as_of TEXT, updated_at TEXT NOT NULL
+        )
+        """)
+        for row in rows:
+            conn.execute("""
+            INSERT INTO market_snapshot (name,symbol,value,change_pct,as_of,updated_at)
+            VALUES (?,?,?,?,?,?)
+            ON CONFLICT(name) DO UPDATE SET symbol=excluded.symbol,value=excluded.value,
+            change_pct=excluded.change_pct,as_of=excluded.as_of,updated_at=excluded.updated_at
+            """, (row['name'],row['symbol'],row.get('value'),row.get('change_pct'),row.get('as_of'),now_iso()))
+
+def get_market_snapshot():
+    with connect() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS market_snapshot (name TEXT PRIMARY KEY,symbol TEXT NOT NULL,value REAL,change_pct REAL,as_of TEXT,updated_at TEXT NOT NULL)""")
+        return [dict(r) for r in conn.execute("""SELECT * FROM market_snapshot ORDER BY CASE name WHEN 'S&P 500' THEN 1 WHEN 'Nasdaq' THEN 2 WHEN 'UST 10Y' THEN 3 WHEN 'DXY' THEN 4 WHEN 'USD/JPY' THEN 5 WHEN 'USD/CNH' THEN 6 WHEN 'Oil' THEN 7 WHEN 'Gold' THEN 8 WHEN 'Copper' THEN 9 WHEN 'Bitcoin' THEN 10 ELSE 99 END""")]
