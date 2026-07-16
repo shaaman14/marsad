@@ -69,9 +69,21 @@ async def send(message, text, markup=None):
 
 
 async def send_brew(message):
-    chunks = build(TIMEZONE)
-    for index, chunk in enumerate(chunks):
-        await send(message, chunk, menu() if index == len(chunks) - 1 else None)
+    try:
+        chunks = build(TIMEZONE)
+        for index, chunk in enumerate(chunks):
+            await send(
+                message,
+                chunk,
+                menu() if index == len(chunks) - 1 else None,
+            )
+    except Exception:
+        logger.exception("Could not build Brew")
+        await send(
+            message,
+            "Marsad could not build today’s Brew. Check Railway logs for the error.",
+            menu(),
+        )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

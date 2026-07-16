@@ -43,6 +43,31 @@ def age_label(published_at):
         return "time unavailable"
 
 
+def freshness_score(published_at):
+    """Return a small freshness bonus without parsing display labels."""
+    if not published_at:
+        return 0
+
+    try:
+        dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=dt_timezone.utc)
+
+        hours = max(
+            0,
+            int(
+                (
+                    datetime.now(dt_timezone.utc)
+                    - dt.astimezone(dt_timezone.utc)
+                ).total_seconds()
+                // 3600
+            ),
+        )
+        return max(0, 8 - min(hours, 8))
+    except Exception:
+        return 0
+
+
 def clean_summary(item):
     title = item["title"].strip().rstrip(".")
     summary = re.sub(r"\s+", " ", (item.get("summary") or "").strip())
@@ -99,7 +124,7 @@ def cluster_events(items, limit=12):
         cluster["score"] = (
             cluster["lead"].get("importance", 0)
             + min(len({x.get("source") for x in cluster["items"]}), 4) * 2
-            + max(0, 8 - int(age_label(cluster["lead"].get("published_at")).split("h")[0])) if "h ago" in age_label(cluster["lead"].get("published_at")) else 0
+            + freshness_score(cluster["lead"].get("published_at"))
         )
     clusters.sort(key=lambda c: c["score"], reverse=True)
     return clusters[:limit]
