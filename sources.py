@@ -326,6 +326,7 @@ async def refresh(user_agent):
         headers={"User-Agent": user_agent},
         limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
     ) as client:
+        await fetch_market_snapshot(config, client)
 
         snapshot_task = asyncio.create_task(fetch_market_snapshot(config, client))
 

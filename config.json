@@ -326,7 +326,12 @@
     "rises over",
     "falls over",
     "why shares",
-    "is trending"
+    "is trending",
+    "will beat estimates",
+    "what you should know",
+    "attracting investor attention",
+    "stock to buy",
+    "analyst rating"
   ],
   "market_snapshot": {
     "S&P 500": "^GSPC",
@@ -339,5 +344,27 @@
     "Gold": "GC=F",
     "Copper": "HG=F",
     "Bitcoin": "BTC-USD"
+  },
+  "company_event_weights": {
+    "earnings": 12,
+    "guidance": 12,
+    "acquisition": 11,
+    "merger": 11,
+    "stake": 10,
+    "partnership": 9,
+    "regulation": 9,
+    "regulatory": 9,
+    "investigation": 9,
+    "lawsuit": 8,
+    "ceo": 8,
+    "chief executive": 8,
+    "buyback": 8,
+    "dividend": 7,
+    "launch": 5,
+    "product": 4,
+    "analyst": -6,
+    "price target": -8,
+    "what you should know": -10,
+    "will beat estimates": -10
   }
 }
