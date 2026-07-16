@@ -1,18 +1,12 @@
 # Changelog
 
-## v0.5 — Faster refresh
+## v0.7 — Event engine
 
-- Trusted RSS feeds now refresh in parallel.
-- Slow sources time out after 12 seconds.
-- GDELT fallback runs at most once per section.
-- Company discovery is limited to five companies per refresh and runs in parallel.
-- Company queries time out after 8 seconds.
-- Background refresh changed from every 30 minutes to hourly.
-- Brew remains instant because it reads cached data.
-
-## v0.4
-
-- Narrative Brew layout.
-- Better market filtering.
-- Explicit company/theme statuses.
-- Rotating Coffee Break.
+- Articles are clustered into events before publication.
+- Duplicate coverage is merged into one story with multiple source names.
+- World section enforces regional diversity.
+- Markets section enforces topic diversity.
+- Company searches use expanded aliases and every tracked company is queried.
+- Theme searches use dedicated query universes instead of the theme label alone.
+- Story ranking now uses importance, freshness and source corroboration.
+- Coffee Break has a larger rotating fallback library and fresh NASA content.

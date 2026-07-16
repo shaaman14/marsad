@@ -21,37 +21,44 @@
       {
         "name": "Associated Press",
         "url": "https://apnews.com/index.rss",
-        "priority": 10
+        "priority": 10,
+        "region": "Global"
       },
       {
         "name": "BBC World",
         "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
-        "priority": 9
+        "priority": 9,
+        "region": "Global"
       },
       {
         "name": "Al Jazeera",
         "url": "https://www.aljazeera.com/xml/rss/all.xml",
-        "priority": 9
+        "priority": 9,
+        "region": "Middle East"
       },
       {
         "name": "CNA World",
         "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6311",
-        "priority": 9
+        "priority": 9,
+        "region": "Global"
       },
       {
         "name": "CNA Asia",
         "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511",
-        "priority": 9
+        "priority": 9,
+        "region": "Asia"
       },
       {
         "name": "Deutsche Welle",
         "url": "https://rss.dw.com/rdf/rss-en-all",
-        "priority": 8
+        "priority": 8,
+        "region": "Europe"
       },
       {
         "name": "France 24",
         "url": "https://www.france24.com/en/rss",
-        "priority": 8
+        "priority": 8,
+        "region": "Europe"
       }
     ],
     "markets": [
@@ -79,6 +86,24 @@
         "name": "CNA Business",
         "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6936",
         "priority": 9
+      }
+    ],
+    "themes": [
+      {
+        "name": "World Nuclear News",
+        "url": "https://www.world-nuclear-news.org/rss",
+        "priority": 10,
+        "region": "Global",
+        "forced_topic": "Uranium"
+      }
+    ],
+    "coffee": [
+      {
+        "name": "NASA",
+        "url": "https://www.nasa.gov/feed/",
+        "priority": 9,
+        "region": "Global",
+        "forced_topic": "Science"
       }
     ]
   },
@@ -168,5 +193,94 @@
     "livemint.com",
     "msn.com",
     "newsbreak.com"
-  ]
+  ],
+  "company_aliases": {
+    "Alibaba": [
+      "Alibaba",
+      "BABA",
+      "9988"
+    ],
+    "Brookfield Asset Management": [
+      "Brookfield Asset Management",
+      "BAM"
+    ],
+    "Cameco": [
+      "Cameco",
+      "CCJ",
+      "CCO"
+    ],
+    "KKR": [
+      "KKR"
+    ],
+    "Mastercard": [
+      "Mastercard",
+      "MA"
+    ],
+    "NVIDIA": [
+      "NVIDIA",
+      "Nvidia",
+      "NVDA"
+    ],
+    "Reddit": [
+      "Reddit",
+      "RDDT"
+    ],
+    "Visa": [
+      "Visa",
+      "NYSE: V"
+    ]
+  },
+  "theme_queries": {
+    "AI capex": [
+      "AI capex Microsoft Meta Alphabet Amazon Oracle NVIDIA TSMC Broadcom AMD data centres",
+      "artificial intelligence infrastructure spending hyperscalers"
+    ],
+    "China technology": [
+      "Alibaba Tencent Baidu Meituan JD.com China technology",
+      "China internet regulation cloud chips"
+    ],
+    "Private markets": [
+      "KKR Blackstone Apollo Brookfield private equity private credit",
+      "private markets fundraising exits deals"
+    ],
+    "Uranium": [
+      "uranium Cameco Kazatomprom NexGen uranium price nuclear fuel",
+      "nuclear reactor uranium supply demand"
+    ]
+  },
+  "company_search_terms": {
+    "Alibaba": [
+      "Alibaba",
+      "BABA",
+      "9988 HK"
+    ],
+    "Brookfield Asset Management": [
+      "Brookfield Asset Management",
+      "BAM"
+    ],
+    "Cameco": [
+      "Cameco",
+      "CCJ",
+      "CCO CN"
+    ],
+    "KKR": [
+      "KKR"
+    ],
+    "Mastercard": [
+      "Mastercard",
+      "MA NYSE"
+    ],
+    "NVIDIA": [
+      "NVIDIA",
+      "NVDA"
+    ],
+    "Reddit": [
+      "Reddit",
+      "RDDT"
+    ],
+    "Visa": [
+      "Visa Inc",
+      "V NYSE"
+    ]
+  }
 }

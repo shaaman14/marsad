@@ -11,7 +11,7 @@ import feedparser
 import httpx
 from bs4 import BeautifulSoup
 
-from database import now_iso, recent_articles, save_article, watchlist
+from database import now_iso, recent_articles, save_article, save_source_health, watchlist
 
 BASE = Path(__file__).parent
 
@@ -58,6 +58,21 @@ def story_key(title):
     }
     core = sorted({word for word in words if word not in stop and len(word) > 2})
     return "|".join(core[:10])
+
+
+def infer_region(title):
+    text = title.lower()
+    rules = [
+        ("Asia", ["china", "japan", "korea", "india", "singapore", "asia", "taiwan", "hong kong"]),
+        ("Middle East", ["iran", "israel", "gaza", "saudi", "uae", "qatar", "middle east"]),
+        ("Africa", ["africa", "nigeria", "kenya", "ethiopia", "south africa", "egypt", "morocco"]),
+        ("Europe", ["europe", "eu ", "uk ", "britain", "france", "germany", "italy", "ukraine"]),
+        ("Americas", ["united states", "u.s.", "us ", "canada", "mexico", "brazil", "argentina"]),
+    ]
+    for region, terms in rules:
+        if any(term in text for term in terms):
+            return region
+    return "Global"
 
 
 def infer_topic(title, summary):
@@ -159,8 +174,53 @@ async def fetch_direct_feed(section, spec, client):
             "section": section,
             "published_at": parse_date(entry),
             "source_priority": int(spec.get("priority", 0)),
+            "topic": spec.get("forced_topic") or infer_topic(title, summary),
+            "story_key": story_key(title),
+            "region": spec.get("region") or "Global",
+        })
+    return output
+
+
+async def fetch_google_news(section, query, client):
+    params = urlencode({
+        "q": query,
+        "hl": "en-SG",
+        "gl": "SG",
+        "ceid": "SG:en",
+    })
+    url = "https://news.google.com/rss/search?" + params
+    response = await client.get(url, follow_redirects=True)
+    response.raise_for_status()
+    parsed = feedparser.parse(response.content)
+
+    output = []
+    for entry in parsed.entries[:30]:
+        title = clean(entry.get("title"), 300)
+        link = entry.get("link")
+        if not title or not link:
+            continue
+
+        publisher = ""
+        source_obj = entry.get("source")
+        if isinstance(source_obj, dict):
+            publisher = clean(source_obj.get("title"), 120)
+
+        # Google News titles often end with " - Publisher".
+        if publisher and title.endswith(" - " + publisher):
+            title = title[: -(len(publisher) + 3)].strip()
+
+        summary = clean(entry.get("summary") or entry.get("description"))
+        output.append({
+            "url": link,
+            "title": title,
+            "summary": summary,
+            "source": publisher or "Google News",
+            "section": section,
+            "published_at": parse_date(entry),
+            "source_priority": 4,
             "topic": infer_topic(title, summary),
             "story_key": story_key(title),
+            "region": infer_region(title),
         })
     return output
 
@@ -210,6 +270,7 @@ async def fetch_gdelt(section, query, client, config):
             "source_priority": 2,
             "topic": infer_topic(title, summary),
             "story_key": story_key(title),
+            "region": infer_region(title),
         })
     return output
 
@@ -259,6 +320,7 @@ async def refresh(user_agent):
                     "section": section,
                     "status": "ok",
                     "items": len(items),
+                    "error": None,
                 }, None
             except Exception as exc:
                 return 0, {
@@ -266,6 +328,7 @@ async def refresh(user_agent):
                     "section": section,
                     "status": "error",
                     "items": 0,
+                    "error": str(exc),
                 }, f'{spec["name"]}: {exc}'
 
         # Fetch all trusted feeds in parallel.
@@ -321,27 +384,58 @@ async def refresh(user_agent):
                     if error:
                         errors.append(error)
 
-        # Company discovery is the slowest layer.
-        # Limit to five companies per refresh and run them in parallel.
-        async def run_company(company):
+        # Direct query feeds for all tracked companies and themes.
+        aliases = config.get("company_search_terms", config.get("company_aliases", {}))
+
+        async def run_search(section, label, terms):
+            query = " OR ".join(f'"{term}"' for term in terms)
             try:
                 items = await asyncio.wait_for(
-                    fetch_gdelt("companies", company, client, config),
-                    timeout=8,
+                    fetch_google_news(section, query, client),
+                    timeout=10,
                 )
-                return store(items), None
+                return store(items), {
+                    "source": f"Google News: {label}",
+                    "section": section,
+                    "status": "ok",
+                    "items": len(items),
+                    "error": None,
+                }
             except Exception as exc:
-                return 0, f"Company discovery {company}: {exc}"
+                return 0, {
+                    "source": f"Google News: {label}",
+                    "section": section,
+                    "status": "error",
+                    "items": 0,
+                    "error": str(exc),
+                }
 
-        companies = watchlist("company")[:5]
-        if companies:
-            company_results = await asyncio.gather(
-                *(run_company(company) for company in companies)
+        company_tasks = [
+            run_search(
+                "companies",
+                company,
+                aliases.get(company, [company]),
             )
-            for count, error in company_results:
-                added += count
-                if error:
-                    errors.append(error)
+            for company in watchlist("company")
+        ]
+
+        theme_queries = config.get("theme_queries", {})
+        theme_tasks = []
+        for theme in watchlist("theme"):
+            queries = theme_queries.get(theme, [theme])
+            for idx, query in enumerate(queries[:2]):
+                theme_tasks.append(
+                    run_search("themes", f"{theme} #{idx+1}", [query])
+                )
+
+        search_results = await asyncio.gather(*(company_tasks + theme_tasks))
+        for count, health in search_results:
+            added += count
+            source_health.append(health)
+            if health["status"] == "error":
+                errors.append(f'{health["source"]}: {health["error"]}')
+
+        save_source_health(source_health)
 
     return {
         "added": added,
