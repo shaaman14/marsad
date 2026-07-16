@@ -1,10 +1,11 @@
 # Changelog
 
-## v0.9 — Editorial and market-data fix
+## v1.0 — Six-bug fix
 
-- Market Snapshot now uses one batched Yahoo Finance quote request.
-- Added S&P 500, Nasdaq, UST 10Y, DXY, USD/JPY, USD/CNH, oil, gold, copper and Bitcoin.
-- Company stories are ranked by event importance.
-- Analyst-clickbait and generic investor-attention pieces are heavily penalised.
-- Opening paragraph now synthesises the leading market and world events.
-- Existing event clustering, theme cross-linking and source ranking remain intact.
+- Market Snapshot uses Yahoo's chart endpoint instead of the failing quote endpoint.
+- Market rows fetch concurrently and cache successful results.
+- Themes consume both theme and company news.
+- China Technology excludes reactor, nuclear and uranium stories.
+- Company clickbait is hard-filtered before ranking.
+- Company events require a minimum materiality score.
+- The header uses the editorial synthesis function rather than the old opening.

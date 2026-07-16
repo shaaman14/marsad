@@ -315,23 +315,26 @@
     "PYMNTS.com": 4
   },
   "company_junk_terms": [
-    "legal forum",
-    "exclusive forum",
-    "delaware courts",
-    "shareholder questions during reddit ama",
-    "price target",
-    "gets a hold",
-    "gets a buy",
-    "stock market update",
-    "rises over",
-    "falls over",
-    "why shares",
-    "is trending",
-    "will beat estimates",
-    "what you should know",
+    "analyst rating",
     "attracting investor attention",
+    "delaware courts",
+    "exclusive forum",
+    "fair value",
+    "falls over",
+    "gets a buy",
+    "gets a hold",
+    "investment story",
+    "is trending",
+    "legal forum",
+    "price target",
+    "rises over",
+    "shareholder questions during reddit ama",
+    "stock holdings in",
+    "stock market update",
     "stock to buy",
-    "analyst rating"
+    "what you should know",
+    "why shares",
+    "will beat estimates"
   ],
   "market_snapshot": {
     "S&P 500": "^GSPC",
@@ -366,5 +369,81 @@
     "price target": -8,
     "what you should know": -10,
     "will beat estimates": -10
+  },
+  "theme_rules": {
+    "AI capex": {
+      "include": [
+        "nvidia",
+        "nvda",
+        "microsoft",
+        "meta",
+        "alphabet",
+        "google",
+        "amazon",
+        "oracle",
+        "broadcom",
+        "amd",
+        "tsmc",
+        "data center",
+        "data centre",
+        "ai infrastructure",
+        "artificial intelligence",
+        "ai partnership",
+        "ai chip"
+      ],
+      "exclude": [
+        "reddit ama",
+        "ai-generated image"
+      ]
+    },
+    "China technology": {
+      "include": [
+        "alibaba",
+        "tencent",
+        "baidu",
+        "meituan",
+        "jd.com",
+        "china tech",
+        "chinese technology",
+        "cloud",
+        "semiconductor",
+        "apple intelligence"
+      ],
+      "exclude": [
+        "reactor",
+        "nuclear power",
+        "uranium",
+        "pressure vessel",
+        "nuclear fuel"
+      ]
+    },
+    "Private markets": {
+      "include": [
+        "kkr",
+        "blackstone",
+        "apollo",
+        "brookfield",
+        "private equity",
+        "private credit",
+        "private markets",
+        "buyout",
+        "fundraising"
+      ],
+      "exclude": []
+    },
+    "Uranium": {
+      "include": [
+        "uranium",
+        "cameco",
+        "kazatomprom",
+        "nexgen",
+        "yellowcake",
+        "nuclear fuel",
+        "uranium mine",
+        "uranium production",
+        "cigar lake"
+      ],
+      "exclude": []
+    }
   }
 }

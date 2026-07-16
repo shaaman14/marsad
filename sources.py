@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 import feedparser
 import httpx
@@ -293,18 +293,72 @@ def store(items):
 
 
 async def fetch_market_snapshot(config, client):
-    rows=[]
-    for name,symbol in config.get("market_snapshot",{}).items():
-        try:
-            url="https://query1.finance.yahoo.com/v7/finance/quote?"+urlencode({"symbols":symbol})
-            r=await client.get(url,follow_redirects=True); r.raise_for_status()
-            result=r.json().get("quoteResponse",{}).get("result",[])
-            if not result: continue
-            q=result[0]
-            rows.append({"name":name,"symbol":symbol,"value":q.get("regularMarketPrice"),"change_pct":q.get("regularMarketChangePercent"),"as_of":datetime.fromtimestamp(q.get("regularMarketTime",0),tz=timezone.utc).isoformat() if q.get("regularMarketTime") else None})
-        except Exception:
-            continue
-    if rows: save_market_snapshot(rows)
+    symbols = config.get("market_snapshot", {})
+    semaphore = asyncio.Semaphore(6)
+
+    async def fetch_one(name, symbol):
+        async with semaphore:
+            encoded = quote(symbol, safe="")
+            url = (
+                f"https://query1.finance.yahoo.com/v8/finance/chart/"
+                f"{encoded}?range=5d&interval=1d"
+            )
+            try:
+                response = await asyncio.wait_for(
+                    client.get(url, follow_redirects=True),
+                    timeout=10,
+                )
+                response.raise_for_status()
+                result = response.json().get("chart", {}).get("result", [])
+                if not result:
+                    return None
+
+                chart = result[0]
+                timestamps = chart.get("timestamp") or []
+                closes = (
+                    chart.get("indicators", {})
+                    .get("quote", [{}])[0]
+                    .get("close", [])
+                )
+                valid = [
+                    (ts, close)
+                    for ts, close in zip(timestamps, closes)
+                    if close is not None
+                ]
+                if not valid:
+                    return None
+
+                current_ts, current = valid[-1]
+                previous = valid[-2][1] if len(valid) > 1 else None
+                change_pct = (
+                    ((current / previous) - 1) * 100
+                    if previous not in (None, 0)
+                    else None
+                )
+
+                if symbol == "^TNX":
+                    current = current / 10
+                    change_pct = None
+
+                return {
+                    "name": name,
+                    "symbol": symbol,
+                    "value": current,
+                    "change_pct": change_pct,
+                    "as_of": datetime.fromtimestamp(
+                        current_ts,
+                        tz=timezone.utc,
+                    ).isoformat(),
+                }
+            except Exception:
+                return None
+
+    results = await asyncio.gather(
+        *(fetch_one(name, symbol) for name, symbol in symbols.items())
+    )
+    rows = [row for row in results if row]
+    if rows:
+        save_market_snapshot(rows)
     return rows
 
 
@@ -326,8 +380,6 @@ async def refresh(user_agent):
         headers={"User-Agent": user_agent},
         limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
     ) as client:
-        await fetch_market_snapshot(config, client)
-
         snapshot_task = asyncio.create_task(fetch_market_snapshot(config, client))
 
         async def run_direct(section, spec):

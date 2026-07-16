@@ -252,62 +252,105 @@ def markets_section(items):
 def company_event_score(item, config):
     text = (item["title"] + " " + (item.get("summary") or "")).lower()
     score = int(item.get("importance", 0))
+
     for term, weight in config.get("company_event_weights", {}).items():
         if term in text:
             score += int(weight)
+
     for term in config.get("company_junk_terms", []):
         if term in text:
-            score -= 12
+            score -= 25
+
     return score
+
 
 def company_section():
     cfg = load_config()
     aliases = cfg.get("company_search_terms", cfg.get("company_aliases", {}))
-    items = recent_articles("companies", 300, 72, True)
+    items = recent_articles("companies", 500, 72, True)
     blocks = ["<b>🏢 My Companies</b>"]
 
     for company in watchlist("company")[:12]:
         names = aliases.get(company, [company])
-        matched = [
-            item for item in items
-            if any(name.lower() in (item["title"] + " " + (item.get("summary") or "")).lower() for name in names)
-        ]
-        matched.sort(key=lambda item: company_event_score(item, cfg), reverse=True)
-        matched = [item for item in matched if company_event_score(item, cfg) >= 5]
-        clusters = cluster_events(matched, 3)
+        matched = []
+
+        for item in items:
+            text = (item["title"] + " " + (item.get("summary") or "")).lower()
+            if not any(name.lower() in text for name in names):
+                continue
+
+            score = company_event_score(item, cfg)
+            if score < 8:
+                continue
+
+            copy = dict(item)
+            copy["importance"] = score
+            matched.append(copy)
+
+        clusters = cluster_events(matched, 4)
         if not clusters:
-            blocks.append(f"<b>{escape(company)}</b>\nNo material fresh developments.")
+            blocks.append(
+                f"<b>{escape(company)}</b>\nNo material fresh developments."
+            )
             continue
-        c = clusters[0]
-        lead = c["lead"]
+
+        cluster = clusters[0]
+        lead = cluster["lead"]
         blocks.append(
             f'<b>{escape(company)}</b>\n'
             f'{escape(clean_summary(lead))}\n'
-            f'<i>{source_line(c)}</i>'
+            f'<i>{source_line(cluster)}</i>'
         )
+
     return "\n\n".join(blocks)
 
 
 def theme_section():
-    items = recent_articles("themes", 300, 72, True)
+    cfg = load_config()
+    rules = cfg.get("theme_rules", {})
+    all_items = (
+        recent_articles("themes", 500, 72, True)
+        + recent_articles("companies", 500, 72, True)
+    )
     blocks = ["<b>🧠 Themes</b>"]
+
     for theme in watchlist("theme")[:10]:
-        words = token_set(theme)
-        matched = [
-            item for item in items
-            if words & token_set(item["title"] + " " + (item.get("summary") or "") + " " + (item.get("topic") or ""))
-        ]
-        clusters = cluster_events(matched, 3)
+        rule = rules.get(theme, {})
+        include = [term.lower() for term in rule.get("include", [theme])]
+        exclude = [term.lower() for term in rule.get("exclude", [])]
+        matched = []
+
+        for item in all_items:
+            text = (
+                item["title"] + " "
+                + (item.get("summary") or "") + " "
+                + (item.get("topic") or "")
+            ).lower()
+
+            if not any(term in text for term in include):
+                continue
+            if any(term in text for term in exclude):
+                continue
+
+            copy = dict(item)
+            copy["importance"] = int(item.get("importance", 0)) + 4
+            matched.append(copy)
+
+        clusters = cluster_events(matched, 4)
         if not clusters:
-            blocks.append(f"<b>{escape(theme)}</b>\nNo material fresh developments.")
+            blocks.append(
+                f"<b>{escape(theme)}</b>\nNo material fresh developments."
+            )
             continue
-        c = clusters[0]
-        lead = c["lead"]
+
+        cluster = clusters[0]
+        lead = cluster["lead"]
         blocks.append(
             f'<b>{escape(theme)}</b>\n'
             f'{escape(clean_summary(lead))}\n'
-            f'<i>{source_line(c)}</i>'
+            f'<i>{source_line(cluster)}</i>'
         )
+
     return "\n\n".join(blocks)
 
 
@@ -342,40 +385,37 @@ def opening(world_items, market_items):
 
 
 def editors_take(world_items, market_items):
-    markets = cluster_events(market_items, 6)
-    world = cluster_events(world_items, 6)
+    markets = cluster_events(market_items, 8)
+    world = cluster_events(world_items, 8)
 
-    sentences = []
-    if markets:
-        lead = markets[0]["lead"]
-        sentences.append(clean_summary(lead).rstrip("."))
-    if len(markets) > 1:
-        lead = markets[1]["lead"]
-        sentences.append(clean_summary(lead).rstrip("."))
-    if world:
-        lead = world[0]["lead"]
-        sentences.append(clean_summary(lead).rstrip("."))
+    market_leads = [clean_summary(c["lead"]).rstrip(".") for c in markets[:2]]
+    world_lead = clean_summary(world[0]["lead"]).rstrip(".") if world else ""
 
-    if not sentences:
+    if not market_leads and not world_lead:
         return "Good morning. No major fresh developments were identified."
 
-    if len(sentences) == 1:
-        return "Good morning. " + sentences[0] + "."
+    if market_leads:
+        text = "Good morning. " + market_leads[0]
+        if len(market_leads) > 1:
+            text += (
+                ", while "
+                + market_leads[1][0].lower()
+                + market_leads[1][1:]
+            )
+        text += "."
+    else:
+        text = "Good morning."
 
-    if len(sentences) == 2:
-        return "Good morning. " + sentences[0] + ", while " + sentences[1][0].lower() + sentences[1][1:] + "."
+    if world_lead:
+        text += (
+            " Beyond markets, "
+            + world_lead[0].lower()
+            + world_lead[1:]
+            + "."
+        )
 
-    return (
-        "Good morning. "
-        + sentences[0]
-        + ", while "
-        + sentences[1][0].lower()
-        + sentences[1][1:]
-        + ". Elsewhere, "
-        + sentences[2][0].lower()
-        + sentences[2][1:]
-        + "."
-    )
+    return text
+
 
 def build(timezone_name):
     now = datetime.now(ZoneInfo(timezone_name))
@@ -383,7 +423,7 @@ def build(timezone_name):
     market_items = recent_articles("markets", 80, 36, True)
 
     parts = [
-        f"<b>☕ MARSAD BREW</b>\n<i>{now.strftime('%A, %d %B %Y')}</i>\n\n{escape(opening(world_items, market_items))}",
+        f"<b>☕ MARSAD BREW</b>\n<i>{now.strftime('%A, %d %B %Y')}</i>\n\n{escape(editors_take(world_items, market_items))}",
         market_snapshot_section(),
         world_section(world_items),
         markets_section(market_items),
