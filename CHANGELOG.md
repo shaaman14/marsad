@@ -1,3 +1,11 @@
+# Marsad v1.4 — Company Prices
+
+- Adds live company prices to My Companies.
+- Shows ticker, current USD price, and daily percentage move.
+- Uses green/red Telegram markers with bold move figures.
+- Stores company prices separately from the main market snapshot.
+- Refreshes company prices with the hourly data refresh.
+
 # Changelog
 
 ## v1.2 — Stale-data and ranking fix

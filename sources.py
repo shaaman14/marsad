@@ -11,7 +11,7 @@ import feedparser
 import httpx
 from bs4 import BeautifulSoup
 
-from database import now_iso, recent_articles, save_article, save_market_snapshot, save_source_health, watchlist
+from database import now_iso, recent_articles, save_article, save_company_snapshot, save_market_snapshot, save_source_health, watchlist
 
 BASE = Path(__file__).parent
 
@@ -361,6 +361,85 @@ async def fetch_market_snapshot(config, client):
     return rows
 
 
+async def fetch_company_snapshot(config, client):
+    specs = config.get("company_market_data", {})
+    semaphore = asyncio.Semaphore(6)
+
+    async def fetch_one(company, spec):
+        symbol = spec.get("symbol") if isinstance(spec, dict) else str(spec)
+        currency_override = spec.get("currency") if isinstance(spec, dict) else None
+        if not symbol:
+            return None
+
+        async with semaphore:
+            encoded = quote(symbol, safe="")
+            url = (
+                f"https://query1.finance.yahoo.com/v8/finance/chart/"
+                f"{encoded}?range=5d&interval=1d"
+            )
+            try:
+                response = await asyncio.wait_for(
+                    client.get(url, follow_redirects=True), timeout=10
+                )
+                response.raise_for_status()
+                result = response.json().get("chart", {}).get("result", [])
+                if not result:
+                    return None
+
+                chart = result[0]
+                meta = chart.get("meta", {})
+                timestamps = chart.get("timestamp") or []
+                closes = (
+                    chart.get("indicators", {})
+                    .get("quote", [{}])[0]
+                    .get("close", [])
+                )
+                valid = [
+                    (ts, close) for ts, close in zip(timestamps, closes)
+                    if close is not None
+                ]
+
+                # Prefer Yahoo's live/delayed quote fields. Fall back to the
+                # latest daily close when the exchange is closed or metadata
+                # is incomplete.
+                current = meta.get("regularMarketPrice")
+                previous = meta.get("chartPreviousClose")
+                current_ts = meta.get("regularMarketTime")
+                if current is None and valid:
+                    current_ts, current = valid[-1]
+                if previous is None and len(valid) > 1:
+                    previous = valid[-2][1]
+                if current is None:
+                    return None
+                if current_ts is None:
+                    current_ts = valid[-1][0] if valid else int(datetime.now(timezone.utc).timestamp())
+
+                change_pct = (
+                    ((current / previous) - 1) * 100
+                    if previous not in (None, 0) else None
+                )
+                return {
+                    "company": company,
+                    "symbol": symbol,
+                    "currency": currency_override or meta.get("currency") or "",
+                    "value": current,
+                    "change_pct": change_pct,
+                    "as_of": datetime.fromtimestamp(
+                        current_ts, tz=timezone.utc
+                    ).isoformat(),
+                }
+            except Exception:
+                return None
+
+    results = await asyncio.gather(
+        *(fetch_one(company, spec) for company, spec in specs.items())
+    )
+    rows = [row for row in results if row]
+    if rows:
+        save_company_snapshot(rows)
+    return rows
+
+
 async def refresh(user_agent):
     config = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
     added = 0
@@ -380,6 +459,7 @@ async def refresh(user_agent):
         limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
     ) as client:
         snapshot_task = asyncio.create_task(fetch_market_snapshot(config, client))
+        company_snapshot_task = asyncio.create_task(fetch_company_snapshot(config, client))
 
         async def run_direct(section, spec):
             try:
@@ -509,10 +589,14 @@ async def refresh(user_agent):
                 errors.append(f'{health["source"]}: {health["error"]}')
 
         save_source_health(source_health)
-        await snapshot_task
+        snapshot_rows, company_snapshot_rows = await asyncio.gather(
+            snapshot_task, company_snapshot_task
+        )
 
     return {
         "added": added,
         "errors": errors,
         "source_health": source_health,
+        "snapshot": snapshot_rows,
+        "company_snapshot": company_snapshot_rows,
     }

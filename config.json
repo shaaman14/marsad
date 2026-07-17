@@ -310,7 +310,7 @@
     "GuruFocus": 3,
     "Pulse 2.0": 2,
     "IndexBox": 2,
-    "富途牛牛": 2,
+    "\u5bcc\u9014\u725b\u725b": 2,
     "pehub.com": 5,
     "PYMNTS.com": 4
   },
@@ -505,5 +505,39 @@
     "market_max_per_topic": 2,
     "theme_items_per_theme": 2,
     "company_items_per_company": 1
+  },
+  "company_market_data": {
+    "Alibaba": {
+      "symbol": "BABA",
+      "currency": "USD"
+    },
+    "Brookfield Asset Management": {
+      "symbol": "BAM",
+      "currency": "USD"
+    },
+    "Cameco": {
+      "symbol": "CCJ",
+      "currency": "USD"
+    },
+    "KKR": {
+      "symbol": "KKR",
+      "currency": "USD"
+    },
+    "Mastercard": {
+      "symbol": "MA",
+      "currency": "USD"
+    },
+    "NVIDIA": {
+      "symbol": "NVDA",
+      "currency": "USD"
+    },
+    "Reddit": {
+      "symbol": "RDDT",
+      "currency": "USD"
+    },
+    "Visa": {
+      "symbol": "V",
+      "currency": "USD"
+    }
   }
 }

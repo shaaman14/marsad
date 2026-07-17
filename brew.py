@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from database import get_market_snapshot, recent_articles, watchlist
+from database import get_company_snapshot, get_market_snapshot, recent_articles, watchlist
 
 DIVIDER = "━━━━━━━━━━━━━━━━━━"
 
@@ -431,6 +431,38 @@ def company_event_score(item, config):
     return score
 
 
+def company_price_line(company):
+    row = get_company_snapshot(company)
+    if not row or row.get("value") is None:
+        return ""
+
+    currency = (row.get("currency") or "").upper()
+    symbol = row.get("symbol") or ""
+    value = float(row["value"])
+    if value >= 1000:
+        price = f"{value:,.0f}"
+    elif value >= 100:
+        price = f"{value:,.2f}"
+    else:
+        price = f"{value:,.2f}"
+
+    prefix = "$" if currency == "USD" else (currency + " " if currency else "")
+    change = row.get("change_pct")
+    if change is None:
+        move = ""
+    elif change > 0:
+        move = f"  🟢 <b>▲ {abs(change):.2f}%</b>"
+    elif change < 0:
+        move = f"  🔴 <b>▼ {abs(change):.2f}%</b>"
+    else:
+        move = "  ⚪ <b>0.00%</b>"
+
+    return (
+        f'<code>{escape(symbol)}</code>  '
+        f'<b>{escape(prefix + price)}</b>{move}'
+    )
+
+
 def company_section():
     cfg = load_config()
     aliases = cfg.get("company_search_terms", cfg.get("company_aliases", {}))
@@ -458,16 +490,19 @@ def company_section():
             matched.append(copy)
 
         clusters = cluster_events(matched, 4)
+        price_line = company_price_line(company)
+        heading = f"<b>{escape(company)}</b>"
+        if price_line:
+            heading += f"\n{price_line}"
+
         if not clusters:
-            blocks.append(
-                f"<b>{escape(company)}</b>\nNo material fresh developments."
-            )
+            blocks.append(heading + "\nNo material fresh developments.")
             continue
 
         cluster = clusters[0]
         lead = cluster["lead"]
         blocks.append(
-            f'<b>{escape(company)}</b>\n'
+            heading + "\n\n"
             f'{escape(clean_summary(lead))}\n'
             f'<i>{source_line(cluster)}</i>'
         )

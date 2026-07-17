@@ -71,3 +71,12 @@ After deployment:
 
 GDELT is now fallback-only. It is still used for company discovery until company-specific
 IR and regulatory feeds are added.
+
+
+## Company price display
+
+`My Companies` now displays a live quote line before each company's news:
+
+`NVDA  $214.36  🟢 ▲ 2.31%`
+
+Telegram does not support arbitrary font colours, so green/red emoji markers are used and the percentage is bolded. Company symbols can be changed in `config.json` under `company_market_data`.

@@ -63,6 +63,16 @@ def initialise():
             updated_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS company_snapshot (
+            company TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            currency TEXT,
+            value REAL,
+            change_pct REAL,
+            as_of TEXT,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS source_health (
             source TEXT PRIMARY KEY,
             section TEXT NOT NULL,
@@ -153,6 +163,16 @@ def save_article(article):
 def save_source_health(items):
     with connect() as conn:
         conn.execute("""
+        CREATE TABLE IF NOT EXISTS company_snapshot (
+            company TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            currency TEXT,
+            value REAL,
+            change_pct REAL,
+            as_of TEXT,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS source_health (
             source TEXT PRIMARY KEY,
             section TEXT NOT NULL,
@@ -186,6 +206,16 @@ def save_source_health(items):
 def get_source_health():
     with connect() as conn:
         conn.execute("""
+        CREATE TABLE IF NOT EXISTS company_snapshot (
+            company TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            currency TEXT,
+            value REAL,
+            change_pct REAL,
+            as_of TEXT,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS source_health (
             source TEXT PRIMARY KEY,
             section TEXT NOT NULL,
@@ -242,3 +272,46 @@ def get_market_snapshot():
     with connect() as conn:
         conn.execute("""CREATE TABLE IF NOT EXISTS market_snapshot (name TEXT PRIMARY KEY,symbol TEXT NOT NULL,value REAL,change_pct REAL,as_of TEXT,updated_at TEXT NOT NULL)""")
         return [dict(r) for r in conn.execute("""SELECT * FROM market_snapshot ORDER BY CASE name WHEN 'S&P 500' THEN 1 WHEN 'Nasdaq' THEN 2 WHEN 'UST 10Y' THEN 3 WHEN 'DXY' THEN 4 WHEN 'USD/JPY' THEN 5 WHEN 'USD/CNH' THEN 6 WHEN 'Oil' THEN 7 WHEN 'Gold' THEN 8 WHEN 'Copper' THEN 9 WHEN 'Bitcoin' THEN 10 ELSE 99 END""")]
+
+
+def save_company_snapshot(rows):
+    with connect() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS company_snapshot (
+            company TEXT PRIMARY KEY, symbol TEXT NOT NULL, currency TEXT,
+            value REAL, change_pct REAL, as_of TEXT, updated_at TEXT NOT NULL
+        )
+        """)
+        for row in rows:
+            conn.execute("""
+            INSERT INTO company_snapshot
+            (company,symbol,currency,value,change_pct,as_of,updated_at)
+            VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT(company) DO UPDATE SET
+                symbol=excluded.symbol,currency=excluded.currency,
+                value=excluded.value,change_pct=excluded.change_pct,
+                as_of=excluded.as_of,updated_at=excluded.updated_at
+            """, (
+                row['company'], row['symbol'], row.get('currency'),
+                row.get('value'), row.get('change_pct'),
+                row.get('as_of'), now_iso()
+            ))
+
+
+def get_company_snapshot(company=None):
+    with connect() as conn:
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS company_snapshot (
+            company TEXT PRIMARY KEY, symbol TEXT NOT NULL, currency TEXT,
+            value REAL, change_pct REAL, as_of TEXT, updated_at TEXT NOT NULL
+        )
+        """)
+        if company is not None:
+            row = conn.execute(
+                "SELECT * FROM company_snapshot WHERE company = ? COLLATE NOCASE",
+                (company,),
+            ).fetchone()
+            return dict(row) if row else None
+        return [dict(row) for row in conn.execute(
+            "SELECT * FROM company_snapshot ORDER BY company"
+        )]
