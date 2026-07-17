@@ -308,41 +308,52 @@ def market_snapshot_section():
 
         move = ""
         if change is not None:
-            arrow = "▲" if change >= 0 else "▼"
-            move = f" {arrow} {abs(change):.2f}%"
+            if change > 0:
+                move = f" 🟢 ▲ {abs(change):.2f}%"
+            elif change < 0:
+                move = f" 🔴 ▼ {abs(change):.2f}%"
+            else:
+                move = " ⚪ 0.00%"
 
         lines.append(f"<b>{escape(row['name'])}</b>  {value_text}{move}")
     return "\n".join(lines)
 
 def world_section(items):
     cfg = load_config()
+    display = cfg.get("brew_display", {})
+    limit = int(display.get("world_items", 6))
+    max_per_region = int(display.get("world_max_per_region", 2))
     ranked_items = []
 
     for item in items:
         copy = dict(item)
         copy["importance"] = world_story_score(copy, cfg)
-        if copy["importance"] < 5:
+        # Breadth mode: keep almost all credible fresh stories and use
+        # scoring only to order them, rather than excluding lower-ranked news.
+        if copy["importance"] < -10:
             continue
         ranked_items.append(copy)
 
-    clusters = cluster_events(ranked_items, 25)
+    clusters = cluster_events(ranked_items, 40)
     selected = []
-    used_regions = set()
+    region_counts = defaultdict(int)
 
     for cluster in clusters:
         region = dynamic_region(cluster["lead"])
-        if region in used_regions:
+        if region_counts[region] >= max_per_region:
             continue
         selected.append(cluster)
-        used_regions.add(region)
-        if len(selected) == 3:
+        region_counts[region] += 1
+        if len(selected) >= limit:
             break
 
-    if len(selected) < 3:
+    # Fill any remaining slots regardless of region so useful stories are not
+    # omitted simply because several developments occurred in one geography.
+    if len(selected) < limit:
         for cluster in clusters:
             if cluster not in selected:
                 selected.append(cluster)
-            if len(selected) == 3:
+            if len(selected) >= limit:
                 break
 
     if not selected:
@@ -362,30 +373,44 @@ def world_section(items):
 
 
 def markets_section(items):
-    clusters = cluster_events(items, 20)
+    cfg = load_config()
+    display = cfg.get("brew_display", {})
+    limit = int(display.get("market_items", 8))
+    max_per_topic = int(display.get("market_max_per_topic", 2))
+    clusters = cluster_events(items, 40)
     chosen = []
-    seen_topics = set()
-    for c in clusters:
-        topic = dynamic_market_topic(c["lead"])
-        if topic in seen_topics:
+    topic_counts = defaultdict(int)
+
+    # Breadth mode: permit more than one story per category. Ranking decides
+    # order, but does not force one headline per topic or discard useful items.
+    for cluster in clusters:
+        topic = dynamic_market_topic(cluster["lead"])
+        if topic_counts[topic] >= max_per_topic:
             continue
-        chosen.append(c)
-        seen_topics.add(topic)
-        if len(chosen) == 4:
+        chosen.append(cluster)
+        topic_counts[topic] += 1
+        if len(chosen) >= limit:
             break
+
+    if len(chosen) < limit:
+        for cluster in clusters:
+            if cluster not in chosen:
+                chosen.append(cluster)
+            if len(chosen) >= limit:
+                break
 
     if not chosen:
         return "<b>📈 Markets</b>\n\nNo material fresh market developments."
 
     blocks = ["<b>📈 Markets</b>"]
-    for c in chosen:
-        lead = c["lead"]
+    for cluster in chosen:
+        lead = cluster["lead"]
         topic = dynamic_market_topic(lead)
         block = f'<b>{escape(topic)}</b>\n{escape(clean_summary(lead))}'
-        why = why_it_matters(lead)
+        why = why_it_matters({**lead, "topic": topic})
         if why:
             block += f"\n<i>Why it matters: {escape(why)}</i>"
-        block += f"\n<i>{source_line(c)}</i>"
+        block += f"\n<i>{source_line(cluster)}</i>"
         blocks.append(block)
     return "\n\n".join(blocks)
 
@@ -453,9 +478,11 @@ def company_section():
 def theme_section():
     cfg = load_config()
     rules = cfg.get("theme_rules", {})
+    display = cfg.get("brew_display", {})
+    per_theme = int(display.get("theme_items_per_theme", 2))
     all_items = (
-        recent_articles("themes", 500, 72, True)
-        + recent_articles("companies", 500, 72, True)
+        recent_articles("themes", 500, 36, True)
+        + recent_articles("companies", 500, 36, True)
     )
     blocks = ["<b>🧠 Themes</b>"]
 
@@ -476,8 +503,6 @@ def theme_section():
                 continue
             if any(term in text for term in exclude):
                 continue
-            if not company_story_allowed(item, cfg):
-                continue
 
             copy = dict(item)
             copy["importance"] = (
@@ -487,20 +512,21 @@ def theme_section():
             )
             matched.append(copy)
 
-        clusters = cluster_events(matched, 4)
+        clusters = cluster_events(matched, max(per_theme, 1))
         if not clusters:
             blocks.append(
                 f"<b>{escape(theme)}</b>\nNo material fresh developments."
             )
             continue
 
-        cluster = clusters[0]
-        lead = cluster["lead"]
-        blocks.append(
-            f'<b>{escape(theme)}</b>\n'
-            f'{escape(clean_summary(lead))}\n'
-            f'<i>{source_line(cluster)}</i>'
-        )
+        lines = [f"<b>{escape(theme)}</b>"]
+        for cluster in clusters[:per_theme]:
+            lead = cluster["lead"]
+            lines.append(
+                f'{escape(clean_summary(lead))}\n'
+                f'<i>{source_line(cluster)}</i>'
+            )
+        blocks.append("\n\n".join(lines))
 
     return "\n\n".join(blocks)
 

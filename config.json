@@ -310,7 +310,7 @@
     "GuruFocus": 3,
     "Pulse 2.0": 2,
     "IndexBox": 2,
-    "\u5bcc\u9014\u725b\u725b": 2,
+    "富途牛牛": 2,
     "pehub.com": 5,
     "PYMNTS.com": 4
   },
@@ -497,5 +497,13 @@
     "coup": 12,
     "earthquake": 10,
     "flood": 8
+  },
+  "brew_display": {
+    "world_items": 6,
+    "world_max_per_region": 2,
+    "market_items": 8,
+    "market_max_per_topic": 2,
+    "theme_items_per_theme": 2,
+    "company_items_per_company": 1
   }
 }
