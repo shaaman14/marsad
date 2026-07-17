@@ -1,11 +1,12 @@
 # Changelog
 
-## v1.0 — Six-bug fix
+## v1.2 — Stale-data and ranking fix
 
-- Market Snapshot uses Yahoo's chart endpoint instead of the failing quote endpoint.
-- Market rows fetch concurrently and cache successful results.
-- Themes consume both theme and company news.
-- China Technology excludes reactor, nuclear and uranium stories.
-- Company clickbait is hard-filtered before ranking.
-- Company events require a minimum materiality score.
-- The header uses the editorial synthesis function rather than the old opening.
+- UST 10Y display normalises both old and new cached Yahoo conventions.
+- World regions are recalculated from story text.
+- Low-value political curiosities are penalised below major wars, tariffs and macro events.
+- BOJ, bond-buying and yield stories are dynamically classified as Rates & Central Banks.
+- Company filtering checks the full headline and publisher text, not only the stored source field.
+- Stale MarketBeat, Simply Wall St, Stock Titan, IndexBox and similar stories are blocked at render time.
+- Theme sections use the same source and clickbait filters as company sections.
+- Opening text preserves US/AI casing and uses clean sentence punctuation.

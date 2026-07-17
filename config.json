@@ -445,5 +445,57 @@
       ],
       "exclude": []
     }
+  },
+  "company_source_blocklist": [
+    "GuruFocus",
+    "IDNFinancials.com",
+    "IndexBox",
+    "Investing.com",
+    "MarketBeat",
+    "Stock Titan",
+    "simplywall.st"
+  ],
+  "company_junk_patterns": [
+    "\\banalyst rating\\b",
+    "\\battracting investor attention\\b",
+    "\\bboosts stake in\\b",
+    "\\bfair value\\b",
+    "\\bgets a buy\\b",
+    "\\bgets a hold\\b",
+    "\\bhas \\$[\\d.]+ million stock holdings\\b",
+    "\\binvestment case\\b",
+    "\\binvestment story\\b",
+    "\\bis trending\\b",
+    "\\bprice target\\b",
+    "\\bstock holdings in\\b",
+    "\\bstock rating\\b",
+    "\\btrims stake in\\b",
+    "\\bwhat you should know\\b",
+    "\\bwhy shares\\b",
+    "\\bwill .+ beat estimates\\b"
+  ],
+  "world_low_value_terms": [
+    "testosterone screening",
+    "won't say biden won",
+    "wont say biden won",
+    "approval rating below",
+    "celebrity",
+    "viral video"
+  ],
+  "world_high_value_terms": {
+    "war": 12,
+    "missile": 11,
+    "air strike": 11,
+    "ceasefire": 11,
+    "tariff": 10,
+    "sanction": 10,
+    "election": 8,
+    "central bank": 8,
+    "inflation": 8,
+    "gdp": 8,
+    "trade": 7,
+    "coup": 12,
+    "earthquake": 10,
+    "flood": 8
   }
 }

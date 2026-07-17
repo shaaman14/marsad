@@ -78,7 +78,7 @@ def infer_region(title):
 def infer_topic(title, summary):
     text = f"{title} {summary}".lower()
     rules = [
-        ("Rates & Central Banks", ["fed", "federal reserve", "ecb", "rate cut", "rate hike", "interest rate"]),
+        ("Rates & Central Banks", ["fed", "federal reserve", "ecb", "boj", "bank of japan", "pbo", "pboc", "rate cut", "rate hike", "interest rate", "bond-buying", "bond buying", "yield", "yields"]),
         ("FX", ["dollar", "yen", "yuan", "euro", "currency", "fx"]),
         ("Commodities", ["oil", "gold", "copper", "uranium", "commodity"]),
         ("Equities", ["stocks", "shares", "equities", "nasdaq", "s&p"]),
@@ -337,7 +337,6 @@ async def fetch_market_snapshot(config, client):
                 )
 
                 if symbol == "^TNX":
-                    current = current / 10
                     change_pct = None
 
                 return {

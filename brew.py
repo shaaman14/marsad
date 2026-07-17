@@ -79,6 +79,130 @@ def clean_summary(item):
     return title + "."
 
 
+def sentence_join(prefix, sentence):
+    """Join prose without corrupting acronyms such as US, UK or AI."""
+    sentence = sentence.strip()
+    if not sentence:
+        return prefix
+    return prefix + sentence
+
+
+
+def source_quality(item, config):
+    source = item.get("source") or ""
+    quality = config.get("source_quality", {})
+    return int(quality.get(source, 0))
+
+
+def full_story_text(item):
+    return (
+        item.get("title", "") + " "
+        + (item.get("summary") or "") + " "
+        + (item.get("source") or "")
+    ).lower()
+
+
+def dynamic_market_topic(item):
+    text = full_story_text(item)
+    rules = [
+        ("Rates & Central Banks", [
+            "federal reserve", " fed ", "ecb", "boj", "bank of japan",
+            "pboc", "pbo", "rate hike", "rate cut", "interest rate",
+            "bond-buying", "bond buying", "yield", "yields"
+        ]),
+        ("FX", [
+            "dollar", "yen", "yuan", "euro", "currency", "currencies", "fx"
+        ]),
+        ("Commodities", [
+            "oil", "gold", "copper", "uranium", "commodity", "commodities"
+        ]),
+        ("Equities", [
+            "stocks", "shares", "equities", "nasdaq", "s&p"
+        ]),
+        ("Economy", [
+            "gdp", "inflation", "jobs", "employment", "pmi",
+            "retail sales", "household expectations"
+        ]),
+    ]
+    for label, terms in rules:
+        if any(term in text for term in terms):
+            return label
+    return item.get("topic") or "General"
+
+
+def dynamic_region(item):
+    text = full_story_text(item)
+
+    # More specific geopolitical regions first.
+    rules = [
+        ("Europe", [
+            "ukraine", "kyiv", "russia", "moscow", "european union",
+            "europe", "france", "germany", "italy", "spain", "britain",
+            "united kingdom"
+        ]),
+        ("Middle East", [
+            "iran", "israel", "gaza", "bahrain", "kuwait", "qatar",
+            "saudi", "uae", "united arab emirates", "hormuz",
+            "hezbollah", "middle east"
+        ]),
+        ("Asia", [
+            "china", "japan", "korea", "india", "singapore", "malaysia",
+            "indonesia", "thailand", "philippines", "taiwan", "hong kong",
+            "asia", "anwar", "takaichi"
+        ]),
+        ("Africa", [
+            "africa", "nigeria", "kenya", "ethiopia", "south africa",
+            "egypt", "morocco", "algeria", "tunisia"
+        ]),
+        ("Americas", [
+            "united states", "u.s.", "us ", "american", "washington",
+            "pentagon", "trump", "biden", "canada", "mexico", "brazil",
+            "argentina", "latin america"
+        ]),
+    ]
+    for region, terms in rules:
+        if any(term in text for term in terms):
+            return region
+
+    stored = item.get("region")
+    return stored if stored and stored != "Global" else "Global"
+
+
+def company_story_allowed(item, config):
+    text = full_story_text(item)
+    blocked = {
+        value.lower()
+        for value in config.get("company_source_blocklist", [])
+    }
+
+    # Google News can label the source Yahoo while the actual publisher
+    # appears in the headline, so check the entire story text.
+    if any(source in text for source in blocked):
+        return False
+
+    for pattern in config.get("company_junk_patterns", []):
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return False
+
+    return True
+
+
+def world_story_score(item, config):
+    text = full_story_text(item)
+    score = int(item.get("importance", 0))
+    score += source_quality(item, config)
+    score += source_quality(item, config)
+
+    for term, weight in config.get("world_high_value_terms", {}).items():
+        if term in text:
+            score += int(weight)
+
+    for term in config.get("world_low_value_terms", []):
+        if term in text:
+            score -= 30
+
+    return score
+
 def token_set(text):
     stop = {
         "the","a","an","to","of","in","on","for","and","with","as","at","by","from",
@@ -170,6 +294,10 @@ def market_snapshot_section():
             continue
 
         if row["name"] == "UST 10Y":
+            if value < 1:
+                value *= 10
+            elif value > 20:
+                value /= 10
             value_text = f"{value:.2f}%"
         elif row["name"] in {"USD/JPY", "USD/CNH"}:
             value_text = f"{value:.3f}"
@@ -187,21 +315,33 @@ def market_snapshot_section():
     return "\n".join(lines)
 
 def world_section(items):
-    clusters = cluster_events(items, 15)
+    cfg = load_config()
+    ranked_items = []
+
+    for item in items:
+        copy = dict(item)
+        copy["importance"] = world_story_score(copy, cfg)
+        if copy["importance"] < 5:
+            continue
+        ranked_items.append(copy)
+
+    clusters = cluster_events(ranked_items, 25)
     selected = []
     used_regions = set()
-    for c in clusters:
-        region = c["lead"].get("region") or "Global"
+
+    for cluster in clusters:
+        region = dynamic_region(cluster["lead"])
         if region in used_regions:
             continue
-        selected.append(c)
+        selected.append(cluster)
         used_regions.add(region)
         if len(selected) == 3:
             break
+
     if len(selected) < 3:
-        for c in clusters:
-            if c not in selected:
-                selected.append(c)
+        for cluster in clusters:
+            if cluster not in selected:
+                selected.append(cluster)
             if len(selected) == 3:
                 break
 
@@ -209,13 +349,15 @@ def world_section(items):
         return "<b>🌍 Around the World</b>\n\nNo material fresh developments."
 
     blocks = ["<b>🌍 Around the World</b>"]
-    for c in selected:
-        lead = c["lead"]
+    for cluster in selected:
+        lead = cluster["lead"]
         blocks.append(
-            f'<b>{escape(lead.get("region") or "Global")}: {escape(lead["title"])}</b>\n'
+            f'<b>{escape(dynamic_region(lead))}: '
+            f'{escape(lead["title"])}</b>\n'
             f'{escape(clean_summary(lead))}\n'
-            f'<i>{source_line(c)}</i>'
+            f'<i>{source_line(cluster)}</i>'
         )
+
     return "\n\n".join(blocks)
 
 
@@ -224,7 +366,7 @@ def markets_section(items):
     chosen = []
     seen_topics = set()
     for c in clusters:
-        topic = c["lead"].get("topic") or "General"
+        topic = dynamic_market_topic(c["lead"])
         if topic in seen_topics:
             continue
         chosen.append(c)
@@ -238,7 +380,7 @@ def markets_section(items):
     blocks = ["<b>📈 Markets</b>"]
     for c in chosen:
         lead = c["lead"]
-        topic = lead.get("topic") or "General"
+        topic = dynamic_market_topic(lead)
         block = f'<b>{escape(topic)}</b>\n{escape(clean_summary(lead))}'
         why = why_it_matters(lead)
         if why:
@@ -279,8 +421,11 @@ def company_section():
             if not any(name.lower() in text for name in names):
                 continue
 
+            if not company_story_allowed(item, cfg):
+                continue
+
             score = company_event_score(item, cfg)
-            if score < 8:
+            if score < 10:
                 continue
 
             copy = dict(item)
@@ -331,9 +476,15 @@ def theme_section():
                 continue
             if any(term in text for term in exclude):
                 continue
+            if not company_story_allowed(item, cfg):
+                continue
 
             copy = dict(item)
-            copy["importance"] = int(item.get("importance", 0)) + 4
+            copy["importance"] = (
+                int(item.get("importance", 0))
+                + source_quality(item, cfg)
+                + 4
+            )
             matched.append(copy)
 
         clusters = cluster_events(matched, 4)
@@ -386,35 +537,35 @@ def opening(world_items, market_items):
 
 def editors_take(world_items, market_items):
     markets = cluster_events(market_items, 8)
-    world = cluster_events(world_items, 8)
+    cfg = load_config()
 
-    market_leads = [clean_summary(c["lead"]).rstrip(".") for c in markets[:2]]
-    world_lead = clean_summary(world[0]["lead"]).rstrip(".") if world else ""
+    ranked_world = []
+    for item in world_items:
+        copy = dict(item)
+        copy["importance"] = world_story_score(copy, cfg)
+        if copy["importance"] >= 5:
+            ranked_world.append(copy)
+    world = cluster_events(ranked_world, 8)
+
+    market_leads = [
+        clean_summary(cluster["lead"]).rstrip(".")
+        for cluster in markets[:2]
+    ]
+    world_lead = (
+        clean_summary(world[0]["lead"]).rstrip(".")
+        if world else ""
+    )
 
     if not market_leads and not world_lead:
         return "Good morning. No major fresh developments were identified."
 
+    sentences = []
     if market_leads:
-        text = "Good morning. " + market_leads[0]
-        if len(market_leads) > 1:
-            text += (
-                ", while "
-                + market_leads[1][0].lower()
-                + market_leads[1][1:]
-            )
-        text += "."
-    else:
-        text = "Good morning."
-
+        sentences.append("; ".join(market_leads))
     if world_lead:
-        text += (
-            " Beyond markets, "
-            + world_lead[0].lower()
-            + world_lead[1:]
-            + "."
-        )
+        sentences.append("Beyond markets, " + world_lead)
 
-    return text
+    return "Good morning. " + ". ".join(sentences) + "."
 
 
 def build(timezone_name):
