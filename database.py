@@ -67,9 +67,13 @@ def initialise():
             company TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
             currency TEXT,
+            exchange TEXT,
             value REAL,
+            previous_close REAL,
             change_pct REAL,
             as_of TEXT,
+            data_source TEXT,
+            validation_status TEXT,
             updated_at TEXT NOT NULL
         );
 
@@ -167,9 +171,13 @@ def save_source_health(items):
             company TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
             currency TEXT,
+            exchange TEXT,
             value REAL,
+            previous_close REAL,
             change_pct REAL,
             as_of TEXT,
+            data_source TEXT,
+            validation_status TEXT,
             updated_at TEXT NOT NULL
         );
 
@@ -210,9 +218,13 @@ def get_source_health():
             company TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
             currency TEXT,
+            exchange TEXT,
             value REAL,
+            previous_close REAL,
             change_pct REAL,
             as_of TEXT,
+            data_source TEXT,
+            validation_status TEXT,
             updated_at TEXT NOT NULL
         );
 
@@ -274,38 +286,54 @@ def get_market_snapshot():
         return [dict(r) for r in conn.execute("""SELECT * FROM market_snapshot ORDER BY CASE name WHEN 'S&P 500' THEN 1 WHEN 'Nasdaq' THEN 2 WHEN 'UST 10Y' THEN 3 WHEN 'DXY' THEN 4 WHEN 'USD/JPY' THEN 5 WHEN 'USD/CNH' THEN 6 WHEN 'Oil' THEN 7 WHEN 'Gold' THEN 8 WHEN 'Copper' THEN 9 WHEN 'Bitcoin' THEN 10 ELSE 99 END""")]
 
 
+def _ensure_company_snapshot_schema(conn):
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS company_snapshot (
+        company TEXT PRIMARY KEY, symbol TEXT NOT NULL, currency TEXT,
+        exchange TEXT, value REAL, previous_close REAL, change_pct REAL,
+        as_of TEXT, data_source TEXT, validation_status TEXT,
+        updated_at TEXT NOT NULL
+    )
+    """)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(company_snapshot)")}
+    for column, sql_type in {
+        "exchange": "TEXT",
+        "previous_close": "REAL",
+        "data_source": "TEXT",
+        "validation_status": "TEXT",
+    }.items():
+        if column not in columns:
+            conn.execute(f"ALTER TABLE company_snapshot ADD COLUMN {column} {sql_type}")
+
+
 def save_company_snapshot(rows):
     with connect() as conn:
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS company_snapshot (
-            company TEXT PRIMARY KEY, symbol TEXT NOT NULL, currency TEXT,
-            value REAL, change_pct REAL, as_of TEXT, updated_at TEXT NOT NULL
-        )
-        """)
+        _ensure_company_snapshot_schema(conn)
         for row in rows:
             conn.execute("""
             INSERT INTO company_snapshot
-            (company,symbol,currency,value,change_pct,as_of,updated_at)
-            VALUES (?,?,?,?,?,?,?)
+            (company,symbol,currency,exchange,value,previous_close,change_pct,
+             as_of,data_source,validation_status,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(company) DO UPDATE SET
                 symbol=excluded.symbol,currency=excluded.currency,
-                value=excluded.value,change_pct=excluded.change_pct,
-                as_of=excluded.as_of,updated_at=excluded.updated_at
+                exchange=excluded.exchange,value=excluded.value,
+                previous_close=excluded.previous_close,
+                change_pct=excluded.change_pct,as_of=excluded.as_of,
+                data_source=excluded.data_source,
+                validation_status=excluded.validation_status,
+                updated_at=excluded.updated_at
             """, (
                 row['company'], row['symbol'], row.get('currency'),
-                row.get('value'), row.get('change_pct'),
-                row.get('as_of'), now_iso()
+                row.get('exchange'), row.get('value'), row.get('previous_close'),
+                row.get('change_pct'), row.get('as_of'), row.get('data_source'),
+                row.get('validation_status'), now_iso()
             ))
 
 
 def get_company_snapshot(company=None):
     with connect() as conn:
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS company_snapshot (
-            company TEXT PRIMARY KEY, symbol TEXT NOT NULL, currency TEXT,
-            value REAL, change_pct REAL, as_of TEXT, updated_at TEXT NOT NULL
-        )
-        """)
+        _ensure_company_snapshot_schema(conn)
         if company is not None:
             row = conn.execute(
                 "SELECT * FROM company_snapshot WHERE company = ? COLLATE NOCASE",
@@ -315,3 +343,4 @@ def get_company_snapshot(company=None):
         return [dict(row) for row in conn.execute(
             "SELECT * FROM company_snapshot ORDER BY company"
         )]
+

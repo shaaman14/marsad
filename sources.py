@@ -362,12 +362,29 @@ async def fetch_market_snapshot(config, client):
 
 
 async def fetch_company_snapshot(config, client):
+    """Fetch and validate watchlist quotes.
+
+    Integrity rules:
+    - Current price and previous close must belong to the same Yahoo chart.
+    - Daily move is calculated from the immediately preceding valid session,
+      never from ``chartPreviousClose`` (which can represent the beginning of
+      the requested range and previously caused multi-day moves to be shown as
+      one-day moves).
+    - Quotes without symbol, currency, exchange, timestamp, or a defensible
+      prior close are omitted rather than guessed.
+    - Abnormal moves require agreement with Yahoo's reported move when present.
+    """
     specs = config.get("company_market_data", {})
+    integrity_cfg = config.get("data_integrity", {})
+    max_age_hours = float(integrity_cfg.get("company_quote_max_age_hours", 96))
+    abnormal_move_pct = float(integrity_cfg.get("abnormal_move_pct", 15))
+    move_tolerance_pct = float(integrity_cfg.get("move_validation_tolerance_pct", 0.35))
     semaphore = asyncio.Semaphore(6)
 
     async def fetch_one(company, spec):
         symbol = spec.get("symbol") if isinstance(spec, dict) else str(spec)
         currency_override = spec.get("currency") if isinstance(spec, dict) else None
+        expected_exchange = spec.get("exchange") if isinstance(spec, dict) else None
         if not symbol:
             return None
 
@@ -375,14 +392,17 @@ async def fetch_company_snapshot(config, client):
             encoded = quote(symbol, safe="")
             url = (
                 f"https://query1.finance.yahoo.com/v8/finance/chart/"
-                f"{encoded}?range=5d&interval=1d"
+                f"{encoded}?range=10d&interval=1d&includePrePost=false"
             )
             try:
                 response = await asyncio.wait_for(
                     client.get(url, follow_redirects=True), timeout=10
                 )
                 response.raise_for_status()
-                result = response.json().get("chart", {}).get("result", [])
+                payload = response.json().get("chart", {})
+                if payload.get("error"):
+                    return None
+                result = payload.get("result", [])
                 if not result:
                     return None
 
@@ -395,38 +415,63 @@ async def fetch_company_snapshot(config, client):
                     .get("close", [])
                 )
                 valid = [
-                    (ts, close) for ts, close in zip(timestamps, closes)
-                    if close is not None
+                    (int(ts), float(close))
+                    for ts, close in zip(timestamps, closes)
+                    if ts is not None and close is not None and float(close) > 0
                 ]
-
-                # Prefer Yahoo's live/delayed quote fields. Fall back to the
-                # latest daily close when the exchange is closed or metadata
-                # is incomplete.
-                current = meta.get("regularMarketPrice")
-                previous = meta.get("chartPreviousClose")
-                current_ts = meta.get("regularMarketTime")
-                if current is None and valid:
-                    current_ts, current = valid[-1]
-                if previous is None and len(valid) > 1:
-                    previous = valid[-2][1]
-                if current is None:
+                if not valid:
                     return None
-                if current_ts is None:
-                    current_ts = valid[-1][0] if valid else int(datetime.now(timezone.utc).timestamp())
 
-                change_pct = (
-                    ((current / previous) - 1) * 100
-                    if previous not in (None, 0) else None
-                )
+                current = meta.get("regularMarketPrice")
+                current_ts = meta.get("regularMarketTime")
+                if current is None:
+                    current_ts, current = valid[-1]
+                current = float(current)
+                current_ts = int(current_ts or valid[-1][0])
+
+                # The last chart close can be today's live/delayed value. Find
+                # the latest valid close that is materially different in time
+                # from the current quote; this is the actual prior session.
+                prior_candidates = [(ts, px) for ts, px in valid if ts < current_ts - 6 * 3600]
+                previous = prior_candidates[-1][1] if prior_candidates else None
+                if previous is None and len(valid) >= 2:
+                    previous = valid[-2][1]
+                if previous in (None, 0):
+                    return None
+
+                currency = (currency_override or meta.get("currency") or "").upper()
+                exchange = meta.get("fullExchangeName") or meta.get("exchangeName") or ""
+                if not currency or not exchange:
+                    return None
+                if expected_exchange and expected_exchange.lower() not in exchange.lower():
+                    return None
+
+                as_of = datetime.fromtimestamp(current_ts, tz=timezone.utc)
+                age_hours = (datetime.now(timezone.utc) - as_of).total_seconds() / 3600
+                if age_hours < -1 or age_hours > max_age_hours:
+                    return None
+
+                change_pct = ((current / previous) - 1) * 100
+                reported_change = meta.get("regularMarketChangePercent")
+                if reported_change is not None:
+                    reported_change = float(reported_change)
+                    if abs(change_pct - reported_change) > move_tolerance_pct:
+                        return None
+                elif abs(change_pct) >= abnormal_move_pct:
+                    # A large move without a reported cross-check is unsafe.
+                    return None
+
                 return {
                     "company": company,
                     "symbol": symbol,
-                    "currency": currency_override or meta.get("currency") or "",
+                    "exchange": exchange,
+                    "currency": currency,
                     "value": current,
+                    "previous_close": previous,
                     "change_pct": change_pct,
-                    "as_of": datetime.fromtimestamp(
-                        current_ts, tz=timezone.utc
-                    ).isoformat(),
+                    "as_of": as_of.isoformat(),
+                    "data_source": "Yahoo Finance chart",
+                    "validation_status": "verified",
                 }
             except Exception:
                 return None

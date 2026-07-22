@@ -105,29 +105,35 @@ def full_story_text(item):
 def dynamic_market_topic(item):
     text = full_story_text(item)
     rules = [
+        ("M&A", [
+            "acquisition", "acquire", "takeover", "merger", "offer price",
+            "stake talks", "majority stake", "buyout", "bid for", "sell stake"
+        ]),
         ("Rates & Central Banks", [
             "federal reserve", " fed ", "ecb", "boj", "bank of japan",
-            "pboc", "pbo", "rate hike", "rate cut", "interest rate",
-            "bond-buying", "bond buying", "yield", "yields"
-        ]),
-        ("FX", [
-            "dollar", "yen", "yuan", "euro", "currency", "currencies", "fx"
+            "pboc", "rate hike", "rate cut", "interest rate",
+            "bond-buying", "bond buying", "treasury yield", "bond yield"
         ]),
         ("Commodities", [
             "oil", "gold", "copper", "uranium", "commodity", "commodities"
         ]),
-        ("Equities", [
-            "stocks", "shares", "equities", "nasdaq", "s&p"
-        ]),
         ("Economy", [
-            "gdp", "inflation", "jobs", "employment", "pmi",
-            "retail sales", "household expectations"
+            "gdp", "inflation", "jobs report", "employment data", "pmi",
+            "retail sales", "household expectations", "consumer prices"
+        ]),
+        ("FX", [
+            "dollar rises", "dollar falls", "yen rises", "yen falls",
+            "yuan rises", "yuan falls", "euro rises", "euro falls",
+            "currency market", "foreign exchange", " fx "
+        ]),
+        ("Equities", [
+            "stocks", "shares", "equities", "nasdaq", "s&p", "stock"
         ]),
     ]
     for label, terms in rules:
         if any(term in text for term in terms):
             return label
-    return item.get("topic") or "General"
+    return "Corporate News" if item.get("section") == "markets" else (item.get("topic") or "General")
 
 
 def dynamic_region(item):
@@ -434,18 +440,15 @@ def company_event_score(item, config):
 def company_price_line(company):
     row = get_company_snapshot(company)
     if not row or row.get("value") is None:
-        return ""
+        return "<i>Verified price unavailable.</i>"
+    if row.get("validation_status") != "verified":
+        return "<i>Verified price unavailable.</i>"
 
     currency = (row.get("currency") or "").upper()
     symbol = row.get("symbol") or ""
+    exchange = row.get("exchange") or ""
     value = float(row["value"])
-    if value >= 1000:
-        price = f"{value:,.0f}"
-    elif value >= 100:
-        price = f"{value:,.2f}"
-    else:
-        price = f"{value:,.2f}"
-
+    price = f"{value:,.2f}"
     prefix = "$" if currency == "USD" else (currency + " " if currency else "")
     change = row.get("change_pct")
     if change is None:
@@ -457,9 +460,18 @@ def company_price_line(company):
     else:
         move = "  ⚪ <b>0.00%</b>"
 
+    as_of = row.get("as_of") or ""
+    try:
+        dt = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+        stamp = dt.astimezone(ZoneInfo("Asia/Singapore")).strftime("%d %b, %H:%M SGT")
+    except Exception:
+        stamp = "time unavailable"
+
+    exchange_text = f" · {escape(exchange)}" if exchange else ""
     return (
-        f'<code>{escape(symbol)}</code>  '
-        f'<b>{escape(prefix + price)}</b>{move}'
+        f'<code>{escape(symbol)}</code>{exchange_text}  '
+        f'<b>{escape(prefix + price)}</b>{move}\n'
+        f'<i>Verified · as of {escape(stamp)}</i>'
     )
 
 

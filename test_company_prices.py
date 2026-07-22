@@ -20,8 +20,11 @@ class FakeResponse:
                 "result": [{
                     "meta": {
                         "currency": "USD",
+                        "fullExchangeName": "NasdaqGS",
                         "regularMarketPrice": 214.36,
-                        "chartPreviousClose": 209.52,
+                        "chartPreviousClose": 190.00,
+                        "previousClose": 209.52,
+                        "regularMarketChangePercent": 2.31,
                         "regularMarketTime": 1784260800,
                     },
                     "timestamp": [1784174400, 1784260800],
@@ -38,7 +41,7 @@ class FakeClient:
 
 async def main():
     initialise()
-    config = {"company_market_data": {"NVIDIA": {"symbol": "NVDA", "currency": "USD"}}}
+    config = {"company_market_data": {"NVIDIA": {"symbol": "NVDA", "currency": "USD", "exchange": "Nasdaq"}}}
     rows = await fetch_company_snapshot(config, FakeClient())
     assert len(rows) == 1
     stored = get_company_snapshot("NVIDIA")

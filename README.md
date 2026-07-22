@@ -80,3 +80,11 @@ IR and regulatory feeds are added.
 `NVDA  $214.36  🟢 ▲ 2.31%`
 
 Telegram does not support arbitrary font colours, so green/red emoji markers are used and the percentage is bolded. Company symbols can be changed in `config.json` under `company_market_data`.
+
+## v1.5 data-integrity behaviour
+
+Company prices are fail-closed: Marsad displays a quote only when the current
+price, prior-session close, exchange, currency and timestamp pass validation.
+The daily move is calculated from the prior valid trading session—not Yahoo's
+range-level `chartPreviousClose`. Conflicting or stale data is shown as
+`Verified price unavailable` rather than guessed.
