@@ -70,7 +70,7 @@ async def send(message, text, markup=None):
 
 async def send_brew(message):
     try:
-        chunks = build(TIMEZONE)
+        chunks = await build(TIMEZONE)
         for index, chunk in enumerate(chunks):
             await send(
                 message,
@@ -181,7 +181,7 @@ async def scheduled_refresh(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def scheduled_brew(context: ContextTypes.DEFAULT_TYPE):
-    chunks = build(TIMEZONE)
+    chunks = await build(TIMEZONE)
     for chat_id in subscribers():
         try:
             for index, chunk in enumerate(chunks):

@@ -475,7 +475,11 @@
     "CryptoSlate",
     "The Crypto Basic",
     "ZyCrypto",
-    "99Bitcoins"
+    "99Bitcoins",
+    "TradingView",
+    "StockStory",
+    "\u5bcc\u9014\u725b\u725b",
+    "Tech Times"
   ],
   "company_junk_patterns": [
     "\\banalyst rating\\b",
@@ -494,7 +498,15 @@
     "\\btrims stake in\\b",
     "\\bwhat you should know\\b",
     "\\bwhy shares\\b",
-    "\\bwill .+ beat estimates\\b"
+    "\\bwill .+ beat estimates\\b",
+    "\\bshould .*be in your portfolio\\b",
+    "\\bshould you buy\\b",
+    "\\bhere'?s why\\b",
+    "\\bearnings call highlights\\b",
+    "\\bcould send the stock soaring\\b",
+    "\\bbeat potential\\b",
+    "\\bmarket movers\\b",
+    "\\bnears .*earnings\\b"
   ],
   "world_low_value_terms": [
     "testosterone screening",

@@ -87,7 +87,9 @@ MARKET_TERMS = {
 
 BUSINESS_ONLY_TERMS = {
     "movie", "film", "streaming", "social media curfew", "lawsuit",
-    "celebrity", "box office", "television", "entertainment"
+    "celebrity", "box office", "television", "entertainment",
+    "supply challenges", "out of stock", "discontinued", "recipe",
+    "supermarket shelves"
 }
 
 
@@ -327,6 +329,70 @@ async def fetch_gdelt(section, query, client, config):
             "region": infer_region(title),
         })
     return output
+
+
+async def fetch_article_description(url, client, limit=400):
+    """Fetch a single article page and pull its meta description.
+
+    Google News search results (the source for every company/theme/macro
+    query) almost never include a usable summary -- only a title. Without
+    real prose, clean_summary() has nothing to synthesize beyond the bare
+    headline, which is why those sections still read like a headline list.
+    This does one lightweight fetch of the article's own page and reads its
+    og:description / twitter:description / meta description tag, falling
+    back to the first substantial paragraph if none of those are present.
+    """
+    try:
+        response = await asyncio.wait_for(
+            client.get(url, follow_redirects=True),
+            timeout=6,
+        )
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        for attrs in (
+            {"property": "og:description"},
+            {"name": "twitter:description"},
+            {"name": "description"},
+        ):
+            tag = soup.find("meta", attrs=attrs)
+            if tag and tag.get("content"):
+                text = clean(tag["content"], limit)
+                if len(text) >= 40:
+                    return text
+
+        for p in soup.find_all("p"):
+            text = clean(p.get_text(" "), limit)
+            if len(text) >= 60:
+                return text
+    except Exception:
+        pass
+    return None
+
+
+async def enrich_lead(item, client, min_summary_len=40):
+    """Return a copy of item with real summary text if the stored one is
+    too thin to synthesize anything from.
+
+    Never mutates the original dict (the database copy is untouched) and
+    never raises -- this is best-effort polish for rendering, not something
+    the brief should fail over if a fetch times out or the page 404s.
+    """
+    summary = (item.get("summary") or "").strip()
+    if len(summary) >= min_summary_len:
+        return item
+
+    url = item.get("url")
+    if not url:
+        return item
+
+    description = await fetch_article_description(url, client)
+    if not description:
+        return item
+
+    enriched = dict(item)
+    enriched["summary"] = description
+    return enriched
 
 
 def store(items):

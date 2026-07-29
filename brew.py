@@ -1,8 +1,14 @@
 from event_engine import cluster
+import asyncio
 import json
+import os
 import re
 from collections import defaultdict
 from functools import lru_cache
+
+import httpx
+
+from sources import enrich_lead
 from datetime import datetime, timezone as dt_timezone
 from html import escape
 from pathlib import Path
@@ -236,7 +242,7 @@ def dynamic_region(item):
     return stored if stored and stored != "Global" else "Global"
 
 
-def company_story_allowed(item, config):
+def story_allowed(item, config):
     text = full_story_text(item)
     blocked = {
         value.lower()
@@ -346,6 +352,22 @@ def cluster_events(items, limit=12):
     return clusters[:limit]
 
 
+async def enrich_clusters(clusters, client):
+    """Concurrently top up any cluster leads whose stored summary is too
+    thin to synthesize from. Only called on the small number of clusters
+    actually about to be rendered, not the full candidate pool, so this
+    adds a handful of concurrent requests per brief rather than hundreds.
+    """
+    if not clusters:
+        return clusters
+    enriched_leads = await asyncio.gather(
+        *(enrich_lead(cluster["lead"], client) for cluster in clusters)
+    )
+    for cluster, lead in zip(clusters, enriched_leads):
+        cluster["lead"] = lead
+    return clusters
+
+
 def source_line(cluster):
     sources = []
     for item in cluster["items"]:
@@ -410,7 +432,7 @@ def market_snapshot_section():
         lines.append(f"<b>{escape(row['name'])}</b>  {value_text}{move}")
     return "\n".join(lines)
 
-def world_section(items):
+async def world_section(items, client):
     cfg = load_config()
     display = cfg.get("brew_display", {})
     limit = int(display.get("world_items", 6))
@@ -451,6 +473,7 @@ def world_section(items):
     if not selected:
         return "<b>🌍 Around the World</b>\n\nNo material fresh developments."
 
+    selected = await enrich_clusters(selected, client)
     blocks = ["<b>🌍 Around the World</b>"]
     for cluster in selected:
         lead = cluster["lead"]
@@ -464,7 +487,7 @@ def world_section(items):
     return "\n\n".join(blocks)
 
 
-def markets_section(items):
+async def markets_section(items, client):
     cfg = load_config()
     display = cfg.get("brew_display", {})
     limit = int(display.get("market_items", 8))
@@ -500,6 +523,7 @@ def markets_section(items):
     if not chosen:
         return "<b>📈 Markets</b>\n\nNo material fresh market developments."
 
+    chosen = await enrich_clusters(chosen, client)
     blocks = ["<b>📈 Markets</b>"]
     for cluster in chosen:
         lead = cluster["lead"]
@@ -567,7 +591,9 @@ def company_price_line(company):
     )
 
 
-def company_section():
+async def company_section(client, used_story_keys=None):
+    if used_story_keys is None:
+        used_story_keys = set()
     cfg = load_config()
     aliases = cfg.get("company_search_terms", cfg.get("company_aliases", {}))
     items = recent_articles("companies", 500, 72, True)
@@ -582,7 +608,7 @@ def company_section():
             if not any(name.lower() in text for name in names):
                 continue
 
-            if not company_story_allowed(item, cfg):
+            if not story_allowed(item, cfg):
                 continue
 
             score = company_event_score(item, cfg)
@@ -604,6 +630,8 @@ def company_section():
             continue
 
         cluster = clusters[0]
+        cluster["lead"] = await enrich_lead(cluster["lead"], client)
+        used_story_keys.add(cluster["lead"].get("story_key"))
         blocks.append(
             heading + "\n\n"
             f'{escape(clean_summary(cluster))}\n'
@@ -613,8 +641,10 @@ def company_section():
     return "\n\n".join(blocks)
 
 
-def theme_section():
+async def theme_section(client, used_story_keys=None):
     cfg = load_config()
+    if used_story_keys is None:
+        used_story_keys = set()
     rules = cfg.get("theme_rules", {})
     display = cfg.get("brew_display", {})
     per_theme = int(display.get("theme_items_per_theme", 2))
@@ -631,6 +661,16 @@ def theme_section():
         matched = []
 
         for item in all_items:
+            # Don't re-print the exact same headline that already led a
+            # company's block above -- themes intentionally also draw from
+            # the companies feed (so Uranium can surface Cameco stories),
+            # but that shouldn't mean literally duplicating the same lead.
+            if item.get("story_key") and item["story_key"] in used_story_keys:
+                continue
+
+            if not story_allowed(item, cfg):
+                continue
+
             text = (
                 item["title"] + " "
                 + (item.get("summary") or "") + " "
@@ -657,8 +697,10 @@ def theme_section():
             )
             continue
 
+        shown = await enrich_clusters(clusters[:per_theme], client)
         lines = [f"<b>{escape(theme)}</b>"]
-        for cluster in clusters[:per_theme]:
+        for cluster in shown:
+            used_story_keys.add(cluster["lead"].get("story_key"))
             lines.append(
                 f'{escape(clean_summary(cluster))}\n'
                 f'<i>{source_line(cluster)}</i>'
@@ -682,7 +724,7 @@ def coffee_break(now):
     return f"<b>☕ Coffee Break</b>\n\n<b>{kind}</b>\n{escape(q)}\n\n<b>Answer:</b> {escape(a)}"
 
 
-def editors_take(world_items, market_items):
+async def editors_take(world_items, market_items, client):
     cfg = load_config()
     ranked_markets = []
     for item in market_items:
@@ -699,13 +741,16 @@ def editors_take(world_items, market_items):
             ranked_world.append(copy)
     world = cluster_events(ranked_world, 8)
 
+    top_markets = await enrich_clusters(markets[:2], client)
+    top_world = await enrich_clusters(world[:1], client)
+
     market_leads = [
         clean_summary(cluster).rstrip(".")
-        for cluster in markets[:2]
+        for cluster in top_markets
     ]
     world_lead = (
-        clean_summary(world[0]).rstrip(".")
-        if world else ""
+        clean_summary(top_world[0]).rstrip(".")
+        if top_world else ""
     )
 
     if not market_leads and not world_lead:
@@ -720,20 +765,29 @@ def editors_take(world_items, market_items):
     return "Good morning. " + ". ".join(sentences) + "."
 
 
-def build(timezone_name):
+async def build(timezone_name):
     now = datetime.now(ZoneInfo(timezone_name))
     world_items = recent_articles("world", 80, 36, True)
     market_items = recent_articles("markets", 80, 36, True)
+    used_story_keys = set()
 
-    parts = [
-        f"<b>☕ MARSAD BREW</b>\n<i>{now.strftime('%A, %d %B %Y')}</i>\n\n{escape(editors_take(world_items, market_items))}",
-        market_snapshot_section(),
-        world_section(world_items),
-        markets_section(market_items),
-        company_section(),
-        theme_section(),
-        coffee_break(now),
-    ]
+    timeout = httpx.Timeout(connect=5.0, read=6.0, write=6.0, pool=5.0)
+    headers = {"User-Agent": os.environ.get("USER_AGENT", "Marsad/0.1")}
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        headers=headers,
+        limits=httpx.Limits(max_connections=15, max_keepalive_connections=8),
+    ) as client:
+        parts = [
+            f"<b>☕ MARSAD BREW</b>\n<i>{now.strftime('%A, %d %B %Y')}</i>\n\n"
+            f"{escape(await editors_take(world_items, market_items, client))}",
+            market_snapshot_section(),
+            await world_section(world_items, client),
+            await markets_section(market_items, client),
+            await company_section(client, used_story_keys),
+            await theme_section(client, used_story_keys),
+            coffee_break(now),
+        ]
 
     chunks, current = [], ""
     for part in parts:
