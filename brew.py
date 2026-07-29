@@ -209,6 +209,27 @@ def world_story_score(item, config):
 
     return score
 
+
+
+def market_story_score(item, config):
+    """Rank market news by investor impact, source quality and freshness."""
+    text = full_story_text(item)
+    score = int(item.get("importance", 0))
+    score += source_quality(item, config) * 2
+    score += freshness_score(item.get("published_at"))
+
+    for rule in config.get("macro_priority_rules", []):
+        terms = [str(term).lower() for term in rule.get("terms", [])]
+        if terms and any(term in text for term in terms):
+            score += int(rule.get("weight", 0))
+
+    for term in config.get("market_low_value_terms", []):
+        if str(term).lower() in text:
+            score -= 35
+
+    return score
+
+
 def token_set(text):
     stop = {
         "the","a","an","to","of","in","on","for","and","with","as","at","by","from",
@@ -383,7 +404,13 @@ def markets_section(items):
     display = cfg.get("brew_display", {})
     limit = int(display.get("market_items", 8))
     max_per_topic = int(display.get("market_max_per_topic", 2))
-    clusters = cluster_events(items, 40)
+    ranked_items = []
+    for item in items:
+        copy = dict(item)
+        copy["importance"] = market_story_score(copy, cfg)
+        ranked_items.append(copy)
+
+    clusters = cluster_events(ranked_items, 40)
     chosen = []
     topic_counts = defaultdict(int)
 
@@ -609,8 +636,13 @@ def opening(world_items, market_items):
 
 
 def editors_take(world_items, market_items):
-    markets = cluster_events(market_items, 8)
     cfg = load_config()
+    ranked_markets = []
+    for item in market_items:
+        copy = dict(item)
+        copy["importance"] = market_story_score(copy, cfg)
+        ranked_markets.append(copy)
+    markets = cluster_events(ranked_markets, 8)
 
     ranked_world = []
     for item in world_items:

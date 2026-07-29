@@ -310,7 +310,7 @@
     "GuruFocus": 3,
     "Pulse 2.0": 2,
     "IndexBox": 2,
-    "富途牛牛": 2,
+    "\u5bcc\u9014\u725b\u725b": 2,
     "pehub.com": 5,
     "PYMNTS.com": 4
   },
@@ -552,5 +552,156 @@
     "company_quote_max_age_hours": 96,
     "abnormal_move_pct": 15,
     "move_validation_tolerance_pct": 0.35
-  }
+  },
+  "macro_queries": [
+    {
+      "label": "Federal Reserve / FOMC",
+      "query": "FOMC Federal Reserve interest rate decision Powell monetary policy",
+      "priority": 100
+    },
+    {
+      "label": "United States inflation",
+      "query": "US CPI PCE inflation data Federal Reserve",
+      "priority": 95
+    },
+    {
+      "label": "United States labour market",
+      "query": "US nonfarm payrolls unemployment jobless claims",
+      "priority": 90
+    },
+    {
+      "label": "Australia macro",
+      "query": "Australia CPI inflation RBA jobs GDP ABS",
+      "priority": 95
+    },
+    {
+      "label": "China macro",
+      "query": "China CPI PPI GDP PMI PBOC monetary policy",
+      "priority": 90
+    },
+    {
+      "label": "Japan macro",
+      "query": "Japan CPI wages GDP Bank of Japan BOJ",
+      "priority": 90
+    },
+    {
+      "label": "Europe macro",
+      "query": "ECB euro zone CPI GDP interest rate decision",
+      "priority": 90
+    },
+    {
+      "label": "United Kingdom macro",
+      "query": "UK CPI GDP jobs Bank of England interest rate",
+      "priority": 85
+    },
+    {
+      "label": "Asia central banks",
+      "query": "Asia central bank interest rate decision inflation Singapore Korea India Indonesia",
+      "priority": 80
+    }
+  ],
+  "macro_priority_rules": [
+    {
+      "name": "FOMC decision",
+      "terms": [
+        "fomc",
+        "federal reserve decision",
+        "fed decision",
+        "powell press conference"
+      ],
+      "weight": 100
+    },
+    {
+      "name": "Major central-bank decision",
+      "terms": [
+        "interest rate decision",
+        "rate decision",
+        "ecb decision",
+        "bank of japan decision",
+        "boj decision",
+        "rba decision",
+        "bank of england decision",
+        "pboc decision"
+      ],
+      "weight": 92
+    },
+    {
+      "name": "Inflation release",
+      "terms": [
+        "consumer price index",
+        " cpi ",
+        "cpi inflation",
+        "core inflation",
+        " pce ",
+        "producer price index",
+        " ppi "
+      ],
+      "weight": 88
+    },
+    {
+      "name": "Labour release",
+      "terms": [
+        "nonfarm payrolls",
+        "payrolls",
+        "jobs report",
+        "employment report",
+        "unemployment rate",
+        "jobless claims"
+      ],
+      "weight": 84
+    },
+    {
+      "name": "Growth release",
+      "terms": [
+        " gdp ",
+        "gross domestic product",
+        "pmi",
+        "retail sales"
+      ],
+      "weight": 76
+    },
+    {
+      "name": "Market repricing",
+      "terms": [
+        "rate cut bets",
+        "rate hike bets",
+        "bond yields",
+        "treasury yields",
+        "market pricing",
+        "swaps price"
+      ],
+      "weight": 55
+    },
+    {
+      "name": "Major geopolitical shock",
+      "terms": [
+        "strait of hormuz",
+        "sanctions",
+        "missile strike",
+        "air strike",
+        "ceasefire",
+        "war"
+      ],
+      "weight": 70
+    },
+    {
+      "name": "Major M&A",
+      "terms": [
+        "acquisition",
+        "takeover",
+        "merger",
+        "buyout",
+        "offer price"
+      ],
+      "weight": 45
+    }
+  ],
+  "market_low_value_terms": [
+    "celebrity",
+    "box office",
+    "sports",
+    "fifa",
+    "viral video",
+    "lifestyle"
+  ]
 }

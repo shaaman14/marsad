@@ -1,3 +1,12 @@
+# v1.6 — Macro-First Editorial Ranking
+
+- Added dedicated macro searches on every refresh.
+- Added explicit priority scoring for FOMC, major central banks, CPI/PCE/PPI, payrolls, GDP/PMI and market repricing.
+- Added Australia-specific CPI, RBA, jobs and GDP coverage.
+- Ranked the Markets section and editor's opening by investor impact rather than ingestion order.
+- Penalised sports, celebrity and lifestyle headlines in market ranking.
+- Added tests for FOMC and Australian CPI priority.
+
 # Marsad v1.4 — Company Prices
 
 - Adds live company prices to My Companies.

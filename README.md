@@ -88,3 +88,10 @@ price, prior-session close, exchange, currency and timestamp pass validation.
 The daily move is calculated from the prior valid trading session—not Yahoo's
 range-level `chartPreviousClose`. Conflicting or stale data is shown as
 `Verified price unavailable` rather than guessed.
+
+
+## v1.6 Macro-First Editorial Ranking
+
+Marsad now runs dedicated searches for major monetary-policy and economic releases every refresh, including FOMC/Federal Reserve, US inflation and labour data, Australian CPI/RBA, China, Japan, Europe, the UK and major Asian central banks. Market stories are ranked by investor impact, source quality and freshness rather than arrival order.
+
+The ranking gives the highest priority to central-bank decisions, CPI/PCE, payrolls, GDP/PMI and major geopolitical shocks. Low-value sports, celebrity and lifestyle stories are penalised.

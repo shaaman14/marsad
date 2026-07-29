@@ -34,7 +34,9 @@ MARKET_TERMS = {
     "dollar", "euro", "yen", "yuan", "oil", "gold", "copper", "commodity",
     "commodities", "inflation", "interest rate", "rates", "central bank",
     "federal reserve", "fed", "ecb", "boj", "pbo", "gdp", "jobs",
-    "employment", "unemployment", "retail sales", "pmi"
+    "employment", "unemployment", "retail sales", "pmi", "fomc", "cpi",
+    "pce", "ppi", "rba", "monetary policy", "consumer price index",
+    "nonfarm payrolls", "jobless claims"
 }
 
 BUSINESS_ONLY_TERMS = {
@@ -78,7 +80,7 @@ def infer_region(title):
 def infer_topic(title, summary):
     text = f"{title} {summary}".lower()
     rules = [
-        ("Rates & Central Banks", ["fed", "federal reserve", "ecb", "boj", "bank of japan", "pbo", "pboc", "rate cut", "rate hike", "interest rate", "bond-buying", "bond buying", "yield", "yields"]),
+        ("Rates & Central Banks", ["fomc", "fed", "federal reserve", "ecb", "boj", "bank of japan", "rba", "reserve bank of australia", "pbo", "pboc", "rate cut", "rate hike", "interest rate", "monetary policy", "bond-buying", "bond buying", "yield", "yields"]),
         ("FX", ["dollar", "yen", "yuan", "euro", "currency", "fx"]),
         ("Commodities", ["oil", "gold", "copper", "uranium", "commodity"]),
         ("Equities", ["stocks", "shares", "equities", "nasdaq", "s&p"]),
@@ -183,7 +185,7 @@ async def fetch_direct_feed(section, spec, client):
     return output
 
 
-async def fetch_google_news(section, query, client):
+async def fetch_google_news(section, query, client, source_priority=4):
     params = urlencode({
         "q": query,
         "hl": "en-SG",
@@ -219,7 +221,7 @@ async def fetch_google_news(section, query, client):
             "source": publisher or "Google News",
             "section": section,
             "published_at": parse_date(entry),
-            "source_priority": 4,
+            "source_priority": int(source_priority),
             "topic": infer_topic(title, summary),
             "story_key": story_key(title),
             "region": infer_region(title),
@@ -588,8 +590,13 @@ async def refresh(user_agent):
         async def run_search(section, label, terms):
             query = " OR ".join(f'"{term}"' for term in terms)
             try:
+                priority = 4
+                for spec in config.get("macro_queries", []):
+                    if label == spec.get("label"):
+                        priority = int(spec.get("priority", 4))
+                        break
                 items = await asyncio.wait_for(
-                    fetch_google_news(section, query, client),
+                    fetch_google_news(section, query, client, priority),
                     timeout=10,
                 )
                 return store(items), {
@@ -607,6 +614,45 @@ async def refresh(user_agent):
                     "items": 0,
                     "error": str(exc),
                 }
+
+        async def run_macro(spec):
+            label = spec.get("label", "Macro")
+            query = spec.get("query", "")
+            try:
+                items = await asyncio.wait_for(
+                    fetch_google_news(
+                        "markets", query, client,
+                        int(spec.get("priority", 4)),
+                    ),
+                    timeout=10,
+                )
+                # Macro queries are purpose-built. Keep only genuinely
+                # market-relevant results before storage.
+                items = [
+                    item for item in items
+                    if market_relevant(item["title"], item.get("summary", ""))
+                ]
+                return store(items), {
+                    "source": f"Google News Macro: {label}",
+                    "section": "markets",
+                    "status": "ok",
+                    "items": len(items),
+                    "error": None,
+                }
+            except Exception as exc:
+                return 0, {
+                    "source": f"Google News Macro: {label}",
+                    "section": "markets",
+                    "status": "error",
+                    "items": 0,
+                    "error": str(exc),
+                }
+
+        macro_tasks = [
+            run_macro(spec)
+            for spec in config.get("macro_queries", [])
+            if spec.get("query")
+        ]
 
         company_tasks = [
             run_search(
@@ -626,7 +672,7 @@ async def refresh(user_agent):
                     run_search("themes", f"{theme} #{idx+1}", [query])
                 )
 
-        search_results = await asyncio.gather(*(company_tasks + theme_tasks))
+        search_results = await asyncio.gather(*(macro_tasks + company_tasks + theme_tasks))
         for count, health in search_results:
             added += count
             source_health.append(health)
