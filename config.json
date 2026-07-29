@@ -455,6 +455,28 @@
     "Stock Titan",
     "simplywall.st"
   ],
+  "blocked_source_names": [
+    "GuruFocus",
+    "IDNFinancials.com",
+    "IndexBox",
+    "Investing.com",
+    "MarketBeat",
+    "Stock Titan",
+    "simplywall.st",
+    "Bitcoin World",
+    "NewsBTC",
+    "CryptoPotato",
+    "CoinGape",
+    "AMBCrypto",
+    "U.Today",
+    "Coinpedia",
+    "Watcher.Guru",
+    "BeInCrypto",
+    "CryptoSlate",
+    "The Crypto Basic",
+    "ZyCrypto",
+    "99Bitcoins"
+  ],
   "company_junk_patterns": [
     "\\banalyst rating\\b",
     "\\battracting investor attention\\b",

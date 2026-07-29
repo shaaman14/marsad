@@ -1,6 +1,8 @@
 import asyncio
+import functools
 import html
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -14,6 +16,50 @@ from bs4 import BeautifulSoup
 from database import now_iso, recent_articles, save_article, save_company_snapshot, save_market_snapshot, save_source_health, watchlist
 
 BASE = Path(__file__).parent
+logger = logging.getLogger("marsad.sources")
+
+
+@functools.lru_cache(maxsize=1)
+def _cached_config_text():
+    # Cached on file contents so a redeploy (new file) invalidates naturally,
+    # while a long-running process doesn't re-read + re-parse config.json on
+    # every single item scored during a refresh.
+    return (BASE / "config.json").read_text(encoding="utf-8")
+
+
+def load_config():
+    return json.loads(_cached_config_text())
+
+
+def is_junk_source(title, summary, source_name, config):
+    """Universal low-quality gate applied at ingestion, before anything is
+    stored. Covers name-based blocks (e.g. content-farm/clickbait outlets)
+    and phrase-based junk patterns (e.g. "price target", "fair value"),
+    regardless of which section (companies/themes/markets/world) the item
+    came from. Previously this only ran for the companies section, and only
+    at display time -- meaning junk from Google News search (which has no
+    domain allowlist) could still land in the database and leak into themes
+    or markets.
+    """
+    name = (source_name or "").lower()
+    blocked_names = {
+        n.lower()
+        for n in (
+            config.get("blocked_source_names", [])
+            or config.get("company_source_blocklist", [])
+        )
+    }
+    if any(blocked in name for blocked in blocked_names):
+        return True
+
+    text = f"{title} {summary}".lower()
+    for pattern in config.get("company_junk_patterns", []):
+        try:
+            if re.search(pattern, text, flags=re.IGNORECASE):
+                return True
+        except re.error:
+            continue
+    return False
 
 
 def clean(value, limit=700):
@@ -123,8 +169,12 @@ def parse_date(entry):
 def importance(title, summary, section, source_priority=0, source_name=""):
     text = f"{title} {summary}".lower()
     score = source_priority
-    config = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
-    score += int(config.get("source_quality", {}).get(source_name, 0))
+    config = load_config()
+    # Unrated sources default to a small penalty rather than a neutral 0.
+    # Previously an unknown clickbait aggregator scored identically to a
+    # vetted outlet until it happened to get name-blocked; this way it has
+    # to be explicitly rated (or filtered by is_junk_source) to compete.
+    score += int(config.get("source_quality", {}).get(source_name, -5))
 
     strong = [
         "default", "downgrade", "upgrade", "merger", "acquisition",
@@ -280,8 +330,14 @@ async def fetch_gdelt(section, query, client, config):
 
 
 def store(items):
+    config = load_config()
     added = 0
+    skipped_junk = 0
     for item in items:
+        if is_junk_source(item["title"], item.get("summary", ""), item.get("source", ""), config):
+            skipped_junk += 1
+            continue
+
         item["fetched_at"] = now_iso()
         item["importance"] = importance(
             item["title"],
@@ -291,6 +347,9 @@ def store(items):
             item.get("source", ""),
         )
         added += int(save_article(item))
+
+    if skipped_junk:
+        logger.info("store(): filtered %d junk-source items before saving", skipped_junk)
     return added
 
 
@@ -488,7 +547,7 @@ async def fetch_company_snapshot(config, client):
 
 
 async def refresh(user_agent):
-    config = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
+    config = load_config()
     added = 0
     errors = []
     source_health = []

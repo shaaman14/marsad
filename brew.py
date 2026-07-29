@@ -2,6 +2,7 @@ from event_engine import cluster
 import json
 import re
 from collections import defaultdict
+from functools import lru_cache
 from datetime import datetime, timezone as dt_timezone
 from html import escape
 from pathlib import Path
@@ -23,8 +24,13 @@ COFFEE_BREAK_ITEMS = [
 ]
 
 
+@lru_cache(maxsize=1)
+def _cached_config_text():
+    return (Path(__file__).parent / "config.json").read_text(encoding="utf-8")
+
+
 def load_config():
-    return json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
+    return json.loads(_cached_config_text())
 
 
 def age_label(published_at):
@@ -69,15 +75,70 @@ def freshness_score(published_at):
         return 0
 
 
-def clean_summary(item):
+WIRE_BOILERPLATE_PATTERNS = [
+    r"\baccording to [^,.]+[,]?\s*",
+    r"\bthe company said in a statement[,]?\s*",
+    r"\bin a statement (released )?(on \w+ )?",
+    r"\bsources (familiar with the matter |close to the matter |with knowledge of the matter )?(said|told reuters|told cnbc)[,]?\s*",
+    r"\bon (monday|tuesday|wednesday|thursday|friday|saturday|sunday)[,]?\s*",
+    r"\b(reuters|cnbc|bloomberg) (reported|reports)( that)?\s*",
+]
+
+
+def strip_boilerplate(text):
+    for pattern in WIRE_BOILERPLATE_PATTERNS:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+    # Attribution clauses ("sources said", "said in a statement") are almost
+    # always followed by "that ..."; once the attribution itself is
+    # stripped, a leading "that" left dangling at the start reads as broken
+    # grammar, so drop it too.
+    text = re.sub(r"^that\s+", "", text.strip(), flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def clean_summary(item_or_cluster, include_title=True):
+    """Build a lead sentence without quoting wire copy verbatim.
+
+    Previously this lifted the first sentence of the raw feed summary
+    unchanged, which is why the brief read like a copy-paste of the source
+    article rather than an editor's take. Instead: lead with the title
+    (typically the cleanest, most declarative part of any feed item), strip
+    common wire-service boilerplate ("according to...", "sources said",
+    weekday datelines) from the summary, and only append it as a second
+    clause when it's genuinely distinct new information rather than a
+    reworded echo of the title. When called with a cluster (not a bare
+    item), also note how many other outlets are covering the same story --
+    that cross-source signal is itself editorial context a single-source
+    clip can't give you.
+    """
+    if "items" in item_or_cluster:
+        cluster = item_or_cluster
+        item = cluster["lead"]
+        other_sources = len({a.get("source") for a in cluster["items"]}) - 1
+    else:
+        item = item_or_cluster
+        other_sources = 0
+
     title = item["title"].strip().rstrip(".")
-    summary = re.sub(r"\s+", " ", (item.get("summary") or "").strip())
+    summary = strip_boilerplate(re.sub(r"\s+", " ", (item.get("summary") or "").strip()))
+
+    detail = ""
     if summary:
         first = summary.split(". ")[0].strip().rstrip(".")
         vague = ("while ", "weak demand", "this ", "it ", "they ", "the country", "the company")
-        if 55 <= len(first) <= 300 and not first.lower().startswith(vague):
-            return first + "."
-    return title + "."
+        distinct = 40 <= len(first) <= 220 and not first.lower().startswith(vague) and not similar(first, title)
+        if distinct:
+            detail = first
+
+    if include_title:
+        body = title + (", " + detail[0].lower() + detail[1:] if detail else "")
+    else:
+        # Caller (e.g. world_section) already shows the title in a heading,
+        # so don't repeat it here -- but never return an empty body.
+        body = detail if detail else title
+
+    coverage = f" ({other_sources} other outlets are also on this)" if other_sources >= 2 else ""
+    return body + coverage + "."
 
 
 def sentence_join(prefix, sentence):
@@ -179,7 +240,10 @@ def company_story_allowed(item, config):
     text = full_story_text(item)
     blocked = {
         value.lower()
-        for value in config.get("company_source_blocklist", [])
+        for value in (
+            config.get("blocked_source_names")
+            or config.get("company_source_blocklist", [])
+        )
     }
 
     # Google News can label the source Yahoo while the actual publisher
@@ -393,7 +457,7 @@ def world_section(items):
         blocks.append(
             f'<b>{escape(dynamic_region(lead))}: '
             f'{escape(lead["title"])}</b>\n'
-            f'{escape(clean_summary(lead))}\n'
+            f'{escape(clean_summary(cluster, include_title=False))}\n'
             f'<i>{source_line(cluster)}</i>'
         )
 
@@ -440,7 +504,7 @@ def markets_section(items):
     for cluster in chosen:
         lead = cluster["lead"]
         topic = dynamic_market_topic(lead)
-        block = f'<b>{escape(topic)}</b>\n{escape(clean_summary(lead))}'
+        block = f'<b>{escape(topic)}</b>\n{escape(clean_summary(cluster))}'
         why = why_it_matters({**lead, "topic": topic})
         if why:
             block += f"\n<i>Why it matters: {escape(why)}</i>"
@@ -452,7 +516,7 @@ def markets_section(items):
 
 def company_event_score(item, config):
     text = (item["title"] + " " + (item.get("summary") or "")).lower()
-    score = int(item.get("importance", 0))
+    score = int(item.get("importance", 0)) + source_quality(item, config)
 
     for term, weight in config.get("company_event_weights", {}).items():
         if term in text:
@@ -540,10 +604,9 @@ def company_section():
             continue
 
         cluster = clusters[0]
-        lead = cluster["lead"]
         blocks.append(
             heading + "\n\n"
-            f'{escape(clean_summary(lead))}\n'
+            f'{escape(clean_summary(cluster))}\n'
             f'<i>{source_line(cluster)}</i>'
         )
 
@@ -596,9 +659,8 @@ def theme_section():
 
         lines = [f"<b>{escape(theme)}</b>"]
         for cluster in clusters[:per_theme]:
-            lead = cluster["lead"]
             lines.append(
-                f'{escape(clean_summary(lead))}\n'
+                f'{escape(clean_summary(cluster))}\n'
                 f'<i>{source_line(cluster)}</i>'
             )
         blocks.append("\n\n".join(lines))
@@ -620,22 +682,6 @@ def coffee_break(now):
     return f"<b>☕ Coffee Break</b>\n\n<b>{kind}</b>\n{escape(q)}\n\n<b>Answer:</b> {escape(a)}"
 
 
-def opening(world_items, market_items):
-    world = cluster_events(world_items, 5)
-    markets = cluster_events(market_items, 5)
-    leads = []
-    if markets:
-        leads.append(clean_summary(markets[0]["lead"]))
-    if world:
-        leads.append(clean_summary(world[0]["lead"]))
-    if not leads:
-        return "Good morning. No major fresh developments were identified."
-    if len(leads) == 1:
-        return "Good morning. " + leads[0]
-    return "Good morning. " + leads[0] + " Meanwhile, " + leads[1][0].lower() + leads[1][1:]
-
-
-
 def editors_take(world_items, market_items):
     cfg = load_config()
     ranked_markets = []
@@ -654,11 +700,11 @@ def editors_take(world_items, market_items):
     world = cluster_events(ranked_world, 8)
 
     market_leads = [
-        clean_summary(cluster["lead"]).rstrip(".")
+        clean_summary(cluster).rstrip(".")
         for cluster in markets[:2]
     ]
     world_lead = (
-        clean_summary(world[0]["lead"]).rstrip(".")
+        clean_summary(world[0]).rstrip(".")
         if world else ""
     )
 
