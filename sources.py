@@ -32,7 +32,12 @@ def load_config():
 
 
 def _normalize_source_text(text):
-    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+    # NOTE: must use \w (Unicode word chars), not [a-z0-9] -- the latter
+    # strips non-Latin scripts (Chinese, Japanese, Korean, etc.) down to an
+    # empty string entirely, which then silently fails the blocklist check
+    # rather than matching or not matching. This let already-blocklisted
+    # sources like 富途牛牛 keep leaking through.
+    return re.sub(r"[^\w]", "", (text or "").lower())
 
 
 def is_junk_source(title, summary, source_name, config):

@@ -518,7 +518,10 @@
     "\\bon behalf of investors\\b",
     "\\bclass action\\b",
     "\\bsecurities fraud\\b",
-    "\\bshareholder rights\\b"
+    "\\bshareholder rights\\b",
+    "\\bis .+ a buy\\b",
+    "\\bcontracts were traded\\b",
+    "\\bopen interest\\b"
   ],
   "world_low_value_terms": [
     "testosterone screening",

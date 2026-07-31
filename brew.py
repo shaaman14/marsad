@@ -244,9 +244,9 @@ def dynamic_region(item):
 
 def story_allowed(item, config):
     text = full_story_text(item)
-    normalized_text = re.sub(r"[^a-z0-9]", "", text)
+    normalized_text = re.sub(r"[^\w]", "", text)
     blocked = {
-        re.sub(r"[^a-z0-9]", "", value.lower())
+        re.sub(r"[^\w]", "", value.lower())
         for value in (
             config.get("blocked_source_names")
             or config.get("company_source_blocklist", [])
