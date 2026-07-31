@@ -31,6 +31,10 @@ def load_config():
     return json.loads(_cached_config_text())
 
 
+def _normalize_source_text(text):
+    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+
+
 def is_junk_source(title, summary, source_name, config):
     """Universal low-quality gate applied at ingestion, before anything is
     stored. Covers name-based blocks (e.g. content-farm/clickbait outlets)
@@ -41,15 +45,20 @@ def is_junk_source(title, summary, source_name, config):
     domain allowlist) could still land in the database and leak into themes
     or markets.
     """
-    name = (source_name or "").lower()
+    normalized_name = _normalize_source_text(source_name)
     blocked_names = {
-        n.lower()
+        # Compared in normalized form (punctuation/spaces stripped) because
+        # Google News sometimes labels the source as a raw domain instead of
+        # the outlet's display name -- e.g. "bitcoinworld.co.in" instead of
+        # "Bitcoin World". A plain lowercase substring check misses that,
+        # since "bitcoin world" (with a space) isn't literally present.
+        _normalize_source_text(n)
         for n in (
             config.get("blocked_source_names", [])
             or config.get("company_source_blocklist", [])
         )
     }
-    if any(blocked in name for blocked in blocked_names):
+    if any(blocked and blocked in normalized_name for blocked in blocked_names):
         return True
 
     text = f"{title} {summary}".lower()

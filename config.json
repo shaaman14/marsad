@@ -283,6 +283,12 @@
       "V NYSE"
     ]
   },
+  "company_alias_exclusions": {
+    "Brookfield Asset Management": [
+      "koninklijke",
+      "bam groep"
+    ]
+  },
   "source_quality": {
     "Reuters": 10,
     "Bloomberg.com": 9,
@@ -506,7 +512,13 @@
     "\\bcould send the stock soaring\\b",
     "\\bbeat potential\\b",
     "\\bmarket movers\\b",
-    "\\bnears .*earnings\\b"
+    "\\bnears .*earnings\\b",
+    "\\binvestor alert\\b",
+    "\\blaw firm investigates\\b",
+    "\\bon behalf of investors\\b",
+    "\\bclass action\\b",
+    "\\bsecurities fraud\\b",
+    "\\bshareholder rights\\b"
   ],
   "world_low_value_terms": [
     "testosterone screening",

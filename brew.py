@@ -244,8 +244,9 @@ def dynamic_region(item):
 
 def story_allowed(item, config):
     text = full_story_text(item)
+    normalized_text = re.sub(r"[^a-z0-9]", "", text)
     blocked = {
-        value.lower()
+        re.sub(r"[^a-z0-9]", "", value.lower())
         for value in (
             config.get("blocked_source_names")
             or config.get("company_source_blocklist", [])
@@ -253,8 +254,11 @@ def story_allowed(item, config):
     }
 
     # Google News can label the source Yahoo while the actual publisher
-    # appears in the headline, so check the entire story text.
-    if any(source in text for source in blocked):
+    # appears in the headline, so check the entire story text. Compared in
+    # normalized (punctuation/space-stripped) form since Google News
+    # sometimes labels the source as a raw domain (e.g. "bitcoinworld.co.in")
+    # instead of the outlet's display name ("Bitcoin World").
+    if any(source and source in normalized_text for source in blocked):
         return False
 
     for pattern in config.get("company_junk_patterns", []):
@@ -591,6 +595,25 @@ def company_price_line(company):
     )
 
 
+def alias_matches(name, text, exclude_terms=()):
+    """True if `name` (a company alias) genuinely refers to the tracked
+    company in `text`, and not to an unrelated company sharing the same
+    ticker/name -- e.g. Brookfield's ticker "BAM" is also just the literal
+    word "BAM" in the completely unrelated Dutch construction firm
+    "Koninklijke BAM Groep". A generic "does this look financial" check
+    doesn't help here, since the unrelated firm's own earnings report is
+    just as financial as Brookfield's. Instead, `exclude_terms` (config-
+    driven, per company) names the specific unrelated entity so it can be
+    ruled out directly once discovered, without risking false negatives on
+    short tickers that aren't actually ambiguous (KKR, NVDA, etc).
+    """
+    if name.lower() not in text:
+        return False
+    if any(term in text for term in exclude_terms):
+        return False
+    return True
+
+
 async def company_section(client, used_story_keys=None):
     if used_story_keys is None:
         used_story_keys = set()
@@ -601,11 +624,15 @@ async def company_section(client, used_story_keys=None):
 
     for company in watchlist("company")[:12]:
         names = aliases.get(company, [company])
+        exclude_terms = [
+            t.lower()
+            for t in cfg.get("company_alias_exclusions", {}).get(company, [])
+        ]
         matched = []
 
         for item in items:
             text = (item["title"] + " " + (item.get("summary") or "")).lower()
-            if not any(name.lower() in text for name in names):
+            if not any(alias_matches(name, text, exclude_terms) for name in names):
                 continue
 
             if not story_allowed(item, cfg):
